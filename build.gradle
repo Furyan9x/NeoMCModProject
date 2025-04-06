@@ -18,8 +18,31 @@ version = mod_version
 group = mod_group_id
 
 repositories {
-    mavenLocal()
+
+    maven { url = "https://maven.enginehub.org/repo/" }
+
+
+    maven { url = "https://maven.theillusivec4.top" }
+    maven { url = "https://cursemaven.com" }
+    maven { url = "https://maven.blamejared.com" }
+    maven { url = "https://maven.kosmx.dev/" }
+
+    maven {
+            name = "Iron's Maven - Release"
+            url = "https://code.redspace.io/releases"
+        }
+    maven {
+        name = 'GeckoLib'
+        url 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
+        content {
+            includeGroup("software.bernie.geckolib")
+        }
+    }
+
 }
+
+
+
 
 base {
     archivesName = mod_id
@@ -45,7 +68,6 @@ neoForge {
     runs {
         client {
             client()
-
             // Comma-separated list of namespaces to load gametests from. Empty = all namespaces.
             systemProperty 'neoforge.enabledGameTestNamespaces', project.mod_id
         }
@@ -113,6 +135,21 @@ configurations {
 }
 
 dependencies {
+    //JEI
+    compileOnly "mezz.jei:jei-${jei_mc_version}-common-api:${jei_version}"
+    compileOnly "mezz.jei:jei-${jei_mc_version}-neoforge-api:${jei_version}"
+    runtimeOnly "mezz.jei:jei-${jei_mc_version}-neoforge:${jei_version}"
+    //Irons Spells API only
+    implementation "io.redspace:irons_spellbooks:${irons_spells_version}"
+
+    runtimeOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}"
+    compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"
+
+    implementation "dev.kosmx.player-anim:player-animation-lib-forge:${player_animator_version}"
+
+    implementation "software.bernie.geckolib:geckolib-neoforge-${minecraft_version}:${geckolib_version}"
+
+
     // Example optional mod dependency with JEI
     // The JEI API is declared for compile time use, while the full JEI artifact is used at runtime
     // compileOnly "mezz.jei:jei-${mc_version}-common-api:${jei_version}"

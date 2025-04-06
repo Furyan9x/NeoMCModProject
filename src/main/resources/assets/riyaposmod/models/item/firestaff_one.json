@@ -1,0 +1,6 @@
+{
+  "parent": "minecraft:item/handheld",
+  "textures": {
+    "layer0": "riyaposmod:item/firestaff_one"
+  }
+}
