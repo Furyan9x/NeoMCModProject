@@ -40,7 +40,7 @@ public class ItemRegistry {
             () -> new StaffItem(ItemPropertiesHelper.equipment(1).attributes(ExtendedSwordItem.createAttributes(RiyaStaffTier.BEGINNER))));
 
     public static final DeferredHolder<Item, Item> FIRESTAFF_ONE = ITEMS.register("firestaff_one",
-            () -> new RiyaStaffItem(Element.FIRE, ItemPropertiesHelper.equipment(1).attributes(ExtendedSwordItem.createAttributes(
+            () -> new RiyaStaffItem(ItemPropertiesHelper.equipment(1).attributes(ExtendedSwordItem.createAttributes(
                             AttributeHelper.withElement(RiyaStaffTier.NOVICE, Element.FIRE, RiyaStaffTier.NOVICE.getElementalBonus())))));
 
     public static final DeferredHolder<Item, Item> ICESTAFF_ONE = ITEMS.register("icestaff_one",

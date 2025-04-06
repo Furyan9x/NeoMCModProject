@@ -18,17 +18,12 @@ import java.util.UUID;
 import static io.redspace.ironsspellbooks.registries.ComponentRegistry.CASTING_IMPLEMENT;
 
 public class RiyaStaffItem extends Item {
-    private final Element element;
 
-    public RiyaStaffItem(Element element, Properties pProperties) {
+    public RiyaStaffItem(Properties pProperties) {
         super(pProperties.component(CASTING_IMPLEMENT, Unit.INSTANCE)/*.component(MULTIHAND_WEAPON, Unit.INSTANCE)*/);
-        this.element = element;
     }
 
 
-    public Element getElement() {
-        return element;
-    }
 
 
 
