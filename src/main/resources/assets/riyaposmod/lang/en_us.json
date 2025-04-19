@@ -4,10 +4,123 @@
   "item.examplemod.example_item": "Example Item",
 
   "item.riyaposmod.starter_staff": "Learner's Cane",
-  "item.riyaposmod.firestaff_one": "Novice Fire Staff",
+
+  "item.riyaposmod.firestaff_novice": "Novice Fire Staff",
+  "item.riyaposmod.firestaff_adept": "Adept Fire Staff",
+  "item.riyaposmod.firestaff_master": "Master Fire Staff",
+  "item.riyaposmod.firestaff_legendary": "Blazing Scepter of the Phoenix",
+
+  "item.riyaposmod.icestaff_novice": "Novice Ice Staff",
+  "item.riyaposmod.icestaff_adept": "Adept Ice Staff",
+  "item.riyaposmod.icestaff_master": "Master Ice Staff",
+  "item.riyaposmod.icestaff_legendary": "Frozen Spire of Eternity",
+
+  "item.riyaposmod.lightningstaff_novice": "Novice Lightning Staff",
+  "item.riyaposmod.lightningstaff_adept": "Adept Lightning Staff",
+  "item.riyaposmod.lightningstaff_master": "Master Lightning Staff",
+  "item.riyaposmod.lightningstaff_legendary": "Stormcaller’s Forked Judgment",
+
+  "item.riyaposmod.naturestaff_novice": "Novice Nature Staff",
+  "item.riyaposmod.naturestaff_adept": "Adept Nature Staff",
+  "item.riyaposmod.naturestaff_master": "Master Nature Staff",
+  "item.riyaposmod.naturestaff_legendary": "Verdant Fang of the Titans",
 
 
+  "item.riyaposmod.eldritchstaff_novice": "Novice Eldritch Staff",
+  "item.riyaposmod.eldritchstaff_adept": "Adept Eldritch Staff",
+  "item.riyaposmod.eldritchstaff_master": "Master Eldritch Staff",
+  "item.riyaposmod.eldritchstaff_legendary": "Umbral Sliver of the Void",
+
+  "item.riyaposmod.holystaff_novice": "Novice Holy Staff",
+  "item.riyaposmod.holystaff_adept": "Adept Holy Staff",
+  "item.riyaposmod.holystaff_master": "Master Holy Staff",
+  "item.riyaposmod.holystaff_legendary": "Radiant Beacon of Ascension",
+
+  "item.riyaposmod.bloodstaff_novice": "Novice Blood Staff",
+  "item.riyaposmod.bloodstaff_adept": "Adept Blood Staff",
+  "item.riyaposmod.bloodstaff_master": "Master Blood Staff",
+  "item.riyaposmod.bloodstaff_legendary": "Sanguine Lance of the Crimson Pact",
+
+  "item.riyaposmod.evocationstaff_novice": "Novice Evocation Staff",
+  "item.riyaposmod.evocationstaff_adept": "Adept Evocation Staff",
+  "item.riyaposmod.evocationstaff_master": "Master Evocation Staff",
+  "item.riyaposmod.evocationstaff_legendary": "Ethereal Conduit of Infinity",
 
 
-  "itemGroup.riyaposmod.staff_tab": "Riyapos Mod Staves"
+  "itemGroup.riyaposmod.staff_tab": "Riyapos Mod Staves",
+
+  "tooltip.riyaposmod.weight": "§7Weight: §f%s",
+
+
+  "_comment": "Faction System",
+
+  "faction.riyaposmod.faction_one.name": "Faction One",
+  "faction.riyaposmod.faction_one.description": "This is a placeholder description for Faction One. Replace with your own lore.",
+  "faction.riyaposmod.faction_one.perk.strength_bonus.name": "Strength Bonus",
+  "faction.riyaposmod.faction_one.perk.strength_bonus.description": "Members of this faction gain a bonus to physical damage.",
+  "faction.riyaposmod.faction_one.hindrance.magic_weakness.name": "Magic Weakness",
+  "faction.riyaposmod.faction_one.hindrance.magic_weakness.description": "Members of this faction are weaker against magical attacks.",
+
+  "faction.riyaposmod.faction_two.name": "Faction Two",
+  "faction.riyaposmod.faction_two.description": "This is a placeholder description for Faction Two. Replace with your own lore.",
+  "faction.riyaposmod.faction_two.perk.magic_bonus.name": "Magic Bonus",
+  "faction.riyaposmod.faction_two.perk.magic_bonus.description": "Members of this faction gain a bonus to magical damage.",
+  "faction.riyaposmod.faction_two.hindrance.physical_weakness.name": "Physical Weakness",
+  "faction.riyaposmod.faction_two.hindrance.physical_weakness.description": "Members of this faction are weaker against physical attacks.",
+
+  "faction.riyaposmod.faction_three.name": "Faction Three",
+  "faction.riyaposmod.faction_three.description": "This is a placeholder description for Faction Three. Replace with your own lore.",
+  "faction.riyaposmod.faction_three.perk.nature_bonus.name": "Nature Bonus",
+  "faction.riyaposmod.faction_three.perk.nature_bonus.description": "Members of this faction gain a bonus to nature-based abilities.",
+  "faction.riyaposmod.faction_three.hindrance.technology_weakness.name": "Technology Weakness",
+  "faction.riyaposmod.faction_three.hindrance.technology_weakness.description": "Members of this faction are less effective with technological items.",
+
+  "faction.riyaposmod.faction_four.name": "Faction Four",
+  "faction.riyaposmod.faction_four.description": "This is a placeholder description for Faction Four. Replace with your own lore.",
+  "faction.riyaposmod.faction_four.perk.trade_bonus.name": "Trade Bonus",
+  "faction.riyaposmod.faction_four.perk.trade_bonus.description": "Members of this faction get better prices when trading.",
+  "faction.riyaposmod.faction_four.hindrance.combat_weakness.name": "Combat Weakness",
+  "faction.riyaposmod.faction_four.hindrance.combat_weakness.description": "Members of this faction are less effective in combat.",
+
+  "faction.riyaposmod.faction_five.name": "Faction Five",
+  "faction.riyaposmod.faction_five.description": "This is a placeholder description for Faction Five. Replace with your own lore.",
+  "faction.riyaposmod.faction_five.perk.protection_bonus.name": "Protection Bonus",
+  "faction.riyaposmod.faction_five.perk.protection_bonus.description": "Members of this faction have increased damage resistance.",
+  "faction.riyaposmod.faction_five.hindrance.stealth_weakness.name": "Stealth Weakness",
+  "faction.riyaposmod.faction_five.hindrance.stealth_weakness.description": "Members of this faction are less effective at stealth.",
+
+  "_comment": "Faction Reputation Levels",
+
+  "faction.riyaposmod.reputation.exalted": "Exalted",
+  "faction.riyaposmod.reputation.revered": "Revered",
+  "faction.riyaposmod.reputation.honored": "Honored",
+  "faction.riyaposmod.reputation.friendly": "Friendly",
+  "faction.riyaposmod.reputation.neutral": "Neutral",
+  "faction.riyaposmod.reputation.unfriendly": "Unfriendly",
+  "faction.riyaposmod.reputation.hostile": "Hostile",
+  "faction.riyaposmod.reputation.hated": "Hated",
+  "faction.riyaposmod.reputation.despised": "Despised",
+  "faction.riyaposmod.reputation.unknown": "Unknown",
+
+  "_comment": "Faction Commands",
+
+  "faction.riyaposmod.command.faction_not_found": "Faction '%s' not found",
+  "faction.riyaposmod.command.already_in_faction": "You are already a member of %s",
+  "faction.riyaposmod.command.joined_faction": "You have joined %s",
+  "faction.riyaposmod.command.join_failed": "Failed to join faction",
+  "faction.riyaposmod.command.not_in_faction": "You are not a member of any faction",
+  "faction.riyaposmod.command.left_faction": "You have left %s",
+  "faction.riyaposmod.command.perks": "Perks:",
+  "faction.riyaposmod.command.hindrances": "Hindrances:",
+  "faction.riyaposmod.command.reputation": "Reputation: %d (%s)",
+  "faction.riyaposmod.command.list_header": "Available Factions:",
+  "faction.riyaposmod.command.reputation_with": "Your reputation with %s is %d (%s)",
+  "faction.riyaposmod.command.set_faction": "Set faction of %d player(s) to %s",
+  "faction.riyaposmod.command.set_faction_failed": "Failed to set faction",
+  "faction.riyaposmod.command.clear_faction": "Cleared faction of %d player(s)",
+  "faction.riyaposmod.command.clear_faction_failed": "Failed to clear faction",
+  "faction.riyaposmod.command.set_reputation": "Set reputation of %d player(s) with %s to %d",
+  "faction.riyaposmod.command.set_reputation_failed": "Failed to set reputation",
+  "faction.riyaposmod.command.modify_reputation": "Modified reputation of %d player(s) with %s by %s",
+  "faction.riyaposmod.command.modify_reputation_failed": "Failed to modify reputation"
 }

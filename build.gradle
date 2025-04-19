@@ -28,9 +28,9 @@ repositories {
     maven { url = "https://maven.kosmx.dev/" }
 
     maven {
-            name = "Iron's Maven - Release"
-            url = "https://code.redspace.io/releases"
-        }
+        name = "Iron's Maven - Release"
+        url = "https://code.redspace.io/releases"
+    }
     maven {
         name = 'GeckoLib'
         url 'https://dl.cloudsmith.io/public/geckolib3/geckolib/maven/'
@@ -148,6 +148,8 @@ dependencies {
     implementation "dev.kosmx.player-anim:player-animation-lib-forge:${player_animator_version}"
 
     implementation "software.bernie.geckolib:geckolib-neoforge-${minecraft_version}:${geckolib_version}"
+
+    implementation "curse.maven:project-mmo-353935:6383832"
 
 
     // Example optional mod dependency with JEI

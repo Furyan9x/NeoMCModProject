@@ -9,7 +9,14 @@ public enum Element {
 
     FIRE(AttributeRegistry.FIRE_SPELL_POWER),
     ICE(AttributeRegistry.ICE_SPELL_POWER),
-    LIGHTNING(AttributeRegistry.LIGHTNING_SPELL_POWER);
+    LIGHTNING(AttributeRegistry.LIGHTNING_SPELL_POWER),
+    //WATER();
+    HOLY(AttributeRegistry.HOLY_SPELL_POWER),
+    NATURE(AttributeRegistry.NATURE_SPELL_POWER),
+    ELDRITCH(AttributeRegistry.ELDRITCH_SPELL_POWER),
+    EVOCATION(AttributeRegistry.EVOCATION_SPELL_POWER),
+    BLOOD(AttributeRegistry.BLOOD_SPELL_POWER);
+    //NECROMANCY();
 
     private final Holder<Attribute> spellPowerAttribute;
 
