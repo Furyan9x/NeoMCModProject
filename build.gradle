@@ -149,7 +149,7 @@ dependencies {
 
     implementation "software.bernie.geckolib:geckolib-neoforge-${minecraft_version}:${geckolib_version}"
 
-    implementation "curse.maven:project-mmo-353935:6383832"
+    //implementation "curse.maven:project-mmo-353935:6383832"
 
 
     // Example optional mod dependency with JEI

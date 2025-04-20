@@ -23,13 +23,21 @@ import net.neoforged.neoforge.event.tick.PlayerTickEvent;
 import org.slf4j.Logger;
 
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 @EventBusSubscriber(modid = "riyaposmod")
 public class WeightEventHandler {
     private static final Logger LOGGER = LogUtils.getLogger();
 
+    // Field to track the last time the chat message was sent
+    // how many seconds between chat messages
+    private static final long COOLDOWN_SECONDS = 5;
+    // store last message time per player UUID
+    private static final Map<UUID, Long> lastMessageTimestamps = new ConcurrentHashMap<>();
     @SubscribeEvent
     public static void onLivingUpdate(PlayerTickEvent.Post event) {
         Player player = event.getEntity();
@@ -184,16 +192,23 @@ public class WeightEventHandler {
 
         // Check against CRITICAL threshold
         if (prospectivePct >= EncumbranceLevel.CRITICAL.getThreshold()) {
+            long now = System.currentTimeMillis();
+            UUID playerId = player.getUUID();
+            long lastTime = lastMessageTimestamps.getOrDefault(playerId, 0L);
+            long cooldownMillis = COOLDOWN_SECONDS * 1_000L;
+
+            // only send if cooldown has expired
+            if (now - lastTime >= cooldownMillis) {
+                player.sendSystemMessage(Component.literal("You are too encumbered to pick that up!"));
+                lastMessageTimestamps.put(playerId, now);
+            }
+
             event.setCanPickup(TriState.FALSE);
-            player.sendSystemMessage(Component.literal("You are too encumbered to pick that up!"));
-            return; // Don't mark dirty if pickup is cancelled
+            return;
         }
 
-        // Allow pickup and mark capability dirty.
-        // The tick handler will recalculate weight and apply effects later.
+        // below CRITICAL, allow pickup and mark weight dirty
         cap.setDirty(true);
-        // Don't manually update cap.setCurrentWeight here.
-        // LOGGER.debug("Marked weight dirty due to item pickup intention by {}", player.getName().getString());
     }
 
 
