@@ -50,7 +50,8 @@
   "itemGroup.riyaposmod.staff_tab": "Riyapos Mod Staves",
 
   "tooltip.riyaposmod.weight": "§7Weight: §f%s",
-
+  "tooltip.riyaposmod.capacity": "§7Weight Bonus: §f%s",
+  "message.riyaposmod.backpack_chest_slot_restricted": "§cBackpacks cannot be equipped in the chest slot. Use a curio slot instead.",
 
   "_comment": "Faction System",
 
@@ -123,4 +124,5 @@
   "faction.riyaposmod.command.set_reputation_failed": "Failed to set reputation",
   "faction.riyaposmod.command.modify_reputation": "Modified reputation of %d player(s) with %s by %s",
   "faction.riyaposmod.command.modify_reputation_failed": "Failed to modify reputation"
+
 }

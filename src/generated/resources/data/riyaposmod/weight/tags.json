@@ -1,0 +1,8 @@
+{
+  "#minecraft:anvil": {
+    "weight": 25.0
+  },
+  "#minecraft:logs": {
+    "weight": 2.0
+  }
+}

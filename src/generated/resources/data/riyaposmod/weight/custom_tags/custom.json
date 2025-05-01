@@ -1,0 +1,11 @@
+{
+  "minecraft:anvil": {
+    "weight": 25.0
+  },
+  "minecraft:netherite_block": {
+    "weight": 15.0
+  },
+  "minecraft:obsidian": {
+    "weight": 10.0
+  }
+}

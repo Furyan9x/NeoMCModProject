@@ -2,16 +2,23 @@ package net.furyan.riyaposmod.weight.capability;
 
 import com.mojang.logging.LogUtils;
 import net.furyan.riyaposmod.weight.EncumbranceLevel;
-import net.furyan.riyaposmod.weight.WeightRegistry;
+import net.furyan.riyaposmod.weight.WeightCalculator;
+import net.furyan.riyaposmod.weight.events.WeightEventHandler;
+import net.furyan.riyaposmod.weight.util.ContainerWeightHelper;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
 import net.minecraft.world.entity.player.Inventory;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.entity.EquipmentSlot;
+import net.neoforged.fml.ModList;
 import org.slf4j.Logger;
+import top.theillusivec4.curios.api.CuriosApi;
+import top.theillusivec4.curios.api.type.inventory.ICurioStacksHandler;
 
 import java.util.HashMap;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * Implementation of the IPlayerWeight capability.
@@ -53,6 +60,7 @@ public class PlayerWeightImpl implements IPlayerWeight {
     public void setCurrentWeight(float weight) {
         this.currentWeight = weight;
     }
+
     @Override
     public float getMaxCapacity() {
         // Use cached value if available
@@ -93,23 +101,194 @@ public class PlayerWeightImpl implements IPlayerWeight {
         this.cachedMaxCapacity = -1;
         return getMaxCapacity();
     }
+    public void refreshEquippedItemBonuses(Player player) {
+        // Remove old equipped item bonuses
+        capacityBonuses.entrySet().removeIf(e -> e.getKey().startsWith("equipped_"));
+        cachedMaxCapacity = -1; // Invalidate cache
+
+
+        // Check armor slots
+        for (ItemStack stack : player.getArmorSlots()) {
+            if (!stack.isEmpty()) {
+                float bonus = WeightCalculator.getCapacityBonus(stack);
+                if (bonus > 0) {
+                    LOGGER.debug("Adding capacity bonus {} from armor item {}", bonus, stack.getItem());
+                    addCapacityBonus(bonus, "equipped_armor_" + stack.getItem());
+                }
+            }
+        }
+
+        // Check Curios slots if Curios is loaded
+        if (ModList.get().isLoaded("curios")) {
+            LOGGER.debug("Checking Curios slots for player {}", player.getName().getString());
+            CuriosApi.getCuriosInventory(player).ifPresent(handler -> {
+                // Only check slots we care about (from WeightEventHandler.SLOTS_TO_CHECK)
+                for (String slotType : WeightEventHandler.SLOTS_TO_CHECK) {
+                    ICurioStacksHandler slotHandler = handler.getCurios().get(slotType);
+                    if (slotHandler != null) {
+                        for (int i = 0; i < slotHandler.getSlots(); i++) {
+                            ItemStack stack = slotHandler.getStacks().getStackInSlot(i);
+                            if (!stack.isEmpty()) {
+                                float bonus = WeightCalculator.getCapacityBonus(stack);
+                                if (bonus > 0) {
+                                    LOGGER.debug("Adding capacity bonus {} from curio item in {} slot: {}", 
+                                        bonus, slotType, stack.getItem());
+                                    addCapacityBonus(bonus, "equipped_curio_" + slotType + "_" + stack.getItem());
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+        
+        // Log final capacity after refresh
+        LOGGER.debug("Final capacity after refresh for player {}: {} (Base: {}, Bonuses: {})", 
+            player.getName().getString(), getMaxCapacity(), baseCapacity, 
+            capacityBonuses.entrySet().stream()
+                .map(e -> String.format("%s: %.1f", e.getKey(), e.getValue()))
+                .collect(Collectors.joining(", ")));
+    }
+    
+    /**
+     * Updates capacity bonus for a specific equipment slot change.
+     * More efficient than refreshing all equipment bonuses.
+     *
+     * @param player The player whose equipment changed
+     * @param slot The equipment slot that changed
+     * @param previousStack The previous ItemStack in the slot
+     * @param newStack The new ItemStack in the slot
+     */
+    public void updateEquipmentSlotBonus(Player player, EquipmentSlot slot, ItemStack previousStack, ItemStack newStack) {
+        // Skip mainhand changes as they don't affect capacity
+        if (slot == EquipmentSlot.MAINHAND || slot == EquipmentSlot.OFFHAND) {
+            return;
+        }
+        
+        // Remove old bonus for this slot if it existed
+        String slotKey = "equipped_armor_" + (previousStack.isEmpty() ? "slot_" + slot.getName() : previousStack.getItem().toString());
+        if (removeCapacityBonus(slotKey) > 0) {
+            LOGGER.debug("Removed capacity bonus from slot {}", slot);
+        }
+        
+        // Add new bonus if applicable
+        if (!newStack.isEmpty()) {
+            float bonus = WeightCalculator.getCapacityBonus(newStack);
+            if (bonus > 0) {
+                LOGGER.debug("Adding capacity bonus {} from equipment item in slot {}: {}", 
+                    bonus, slot, newStack.getItem());
+                addCapacityBonus(bonus, "equipped_armor_" + newStack.getItem());
+            }
+        }
+    }
+    
+    /**
+     * Updates capacity bonus for a specific curio slot change.
+     * More efficient than refreshing all curio bonuses.
+     *
+     * @param player The player whose curio changed
+     * @param slotType The curio slot type that changed
+     * @param index The index within the slot type
+     * @param previousStack The previous ItemStack in the slot
+     * @param newStack The new ItemStack in the slot
+     */
+    public void updateCurioSlotBonus(Player player, String slotType, int index, ItemStack previousStack, ItemStack newStack) {
+        // Skip slots we don't care about
+        if (!WeightEventHandler.SLOTS_TO_CHECK.contains(slotType)) {
+            return;
+        }
+        
+        // Remove old bonus for this slot if it existed
+        String slotKey = "equipped_curio_" + slotType + "_" + 
+            (previousStack.isEmpty() ? "idx_" + index : previousStack.getItem().toString());
+        if (removeCapacityBonus(slotKey) > 0) {
+            LOGGER.debug("Removed capacity bonus from curio slot {} at index {}", slotType, index);
+        }
+        
+        // Add new bonus if applicable
+        if (!newStack.isEmpty()) {
+            float bonus = WeightCalculator.getCapacityBonus(newStack);
+            if (bonus > 0) {
+                LOGGER.debug("Adding capacity bonus {} from curio item in {} slot: {}", 
+                    bonus, slotType, newStack.getItem());
+                addCapacityBonus(bonus, "equipped_curio_" + slotType + "_" + newStack.getItem());
+            }
+        }
+    }
 
     @Override
     public float calculateWeight(Player player) {
-        float weight = 0.0f;
+        // Use array to allow modification in lambda
+        final float[] weightTotal = {0.0f};
+
+        LOGGER.info("Calculating weight for player: {}", player.getName().getString());
 
         // Calculate weight from main inventory
         Inventory inventory = player.getInventory();
         for (int i = 0; i < inventory.getContainerSize(); i++) {
             ItemStack stack = inventory.getItem(i);
             if (!stack.isEmpty()) {
-                weight += WeightRegistry.getWeight(stack.getItem()) * stack.getCount();
+                float itemWeight = WeightCalculator.getWeight(stack) * stack.getCount();
+                weightTotal[0] += itemWeight;
+                
+                // If this is a container, add its contents' weight
+                if (WeightCalculator.isContainer(stack)) {
+                    float containerWeight = ContainerWeightHelper.getContainerWeight(stack, player.level().registryAccess());
+                    weightTotal[0] += containerWeight;
+                    
+                    // Log detailed information for containers
+                    if (containerWeight > 0) {
+                        LOGGER.info("Container in slot {}: {} - Item weight: {}, Contents weight: {}", 
+                            i, stack.getItem(), 
+                            String.format("%.2f", itemWeight),
+                            String.format("%.2f", containerWeight));
+                    }
+                }
             }
         }
 
-        // Store the calculated weight
-        this.currentWeight = weight;
-        return weight;
+        // Calculate weight from Curios slots if the mod is loaded
+        if (ModList.get().isLoaded("curios")) {
+            CuriosApi.getCuriosInventory(player).ifPresent(handler -> {
+                // Only check slots we care about (from WeightEventHandler.SLOTS_TO_CHECK)
+                for (String slotType : WeightEventHandler.SLOTS_TO_CHECK) {
+                    ICurioStacksHandler slotHandler = handler.getCurios().get(slotType);
+                    if (slotHandler != null) {
+                        for (int i = 0; i < slotHandler.getSlots(); i++) {
+                            ItemStack stack = slotHandler.getStacks().getStackInSlot(i);
+                            if (!stack.isEmpty()) {
+                                float itemWeight = WeightCalculator.getWeight(stack) * stack.getCount();
+                                weightTotal[0] += itemWeight;
+                                
+                                // If this is a container, add its contents' weight
+                                if (WeightCalculator.isContainer(stack)) {
+                                    float containerWeight = ContainerWeightHelper.getContainerWeight(stack, player.level().registryAccess());
+                                    weightTotal[0] += containerWeight;
+                                    
+                                    // Log detailed information for containers
+                                    if (containerWeight > 0) {
+                                        LOGGER.info("Container in curio slot {}: {} - Item weight: {}, Contents weight: {}", 
+                                            slotType, stack.getItem(), 
+                                            String.format("%.2f", itemWeight),
+                                            String.format("%.2f", containerWeight));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Store and log the calculated weight
+        this.currentWeight = weightTotal[0];
+        LOGGER.info("Total weight calculated for player {}: {} / {} ({}%)", 
+            player.getName().getString(),
+            String.format("%.2f", this.currentWeight),
+            String.format("%.2f", getMaxCapacity()),
+            String.format("%.1f", (this.currentWeight / getMaxCapacity()) * 100));
+            
+        return weightTotal[0];
     }
 
     @Override
@@ -221,7 +400,13 @@ public class PlayerWeightImpl implements IPlayerWeight {
 
     @Override
     public void setDirty(boolean dirty) {
-    this.dirty = dirty;
+        this.dirty = dirty;
+        if (dirty) {
+            LOGGER.info("Player weight stats - Current: {}, Max: {}, Percentage: {}%",
+                String.format("%.2f", getCurrentWeight()),
+                String.format("%.2f", getMaxCapacity()),
+                String.format("%.1f", (getCurrentWeight() / getMaxCapacity()) * 100));
+        }
     }
 
 }

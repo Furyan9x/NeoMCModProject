@@ -1,0 +1,44 @@
+{
+  "sophisticatedbackpacks:backpack": {
+    "baseCapacityBonus": 20.0,
+    "dynamic": true,
+    "slotMultiplier": 0.5,
+    "slots": 54,
+    "weight": 5.0
+  },
+  "sophisticatedbackpacks:copper_backpack": {
+    "baseCapacityBonus": 30.0,
+    "dynamic": true,
+    "slotMultiplier": 0.5,
+    "slots": 81,
+    "weight": 6.0
+  },
+  "sophisticatedbackpacks:diamond_backpack": {
+    "baseCapacityBonus": 30.0,
+    "dynamic": true,
+    "slotMultiplier": 0.5,
+    "slots": 81,
+    "weight": 6.0
+  },
+  "sophisticatedbackpacks:gold_backpack": {
+    "baseCapacityBonus": 20.0,
+    "dynamic": true,
+    "slotMultiplier": 0.5,
+    "slots": 54,
+    "weight": 5.0
+  },
+  "sophisticatedbackpacks:iron_backpack": {
+    "baseCapacityBonus": 40.0,
+    "dynamic": true,
+    "slotMultiplier": 0.5,
+    "slots": 108,
+    "weight": 8.0
+  },
+  "sophisticatedbackpacks:netherite_backpack": {
+    "baseCapacityBonus": 40.0,
+    "dynamic": true,
+    "slotMultiplier": 0.5,
+    "slots": 108,
+    "weight": 8.0
+  }
+}

@@ -149,6 +149,10 @@ dependencies {
 
     implementation "software.bernie.geckolib:geckolib-neoforge-${minecraft_version}:${geckolib_version}"
 
+    implementation "curse.maven:sophisticated-backpacks-422301:6456081"
+    implementation "curse.maven:sophisticated-core-618298:6455997"
+
+implementation 'com.google.code.gson:gson:2.10.1'
     //implementation "curse.maven:project-mmo-353935:6383832"
 
 

@@ -1,0 +1,176 @@
+{
+  "_default": {
+    "weight": 1.0
+  },
+  "amethyst_rapier": {
+    "weight": 2.4
+  },
+  "archevoker_boots": {
+    "weight": 2.6
+  },
+  "archevoker_chestplate": {
+    "weight": 6.6
+  },
+  "archevoker_helmet": {
+    "weight": 3.6
+  },
+  "archevoker_leggings": {
+    "weight": 5.2
+  },
+  "claymore": {
+    "weight": 2.8000002
+  },
+  "cryomancer_boots": {
+    "weight": 2.6
+  },
+  "cryomancer_chestplate": {
+    "weight": 6.6
+  },
+  "cryomancer_helmet": {
+    "weight": 3.6
+  },
+  "cryomancer_leggings": {
+    "weight": 5.2
+  },
+  "cultist_boots": {
+    "weight": 2.6
+  },
+  "cultist_chestplate": {
+    "weight": 6.6
+  },
+  "cultist_helmet": {
+    "weight": 3.6
+  },
+  "cultist_leggings": {
+    "weight": 5.2
+  },
+  "decrepit_scythe": {
+    "weight": 3.0
+  },
+  "electromancer_boots": {
+    "weight": 2.6
+  },
+  "electromancer_chestplate": {
+    "weight": 6.6
+  },
+  "electromancer_helmet": {
+    "weight": 3.6
+  },
+  "electromancer_leggings": {
+    "weight": 5.2
+  },
+  "gold_crown": {
+    "weight": 7.0
+  },
+  "hellrazor": {
+    "weight": 3.4
+  },
+  "keeper_flamberge": {
+    "weight": 3.0
+  },
+  "legionnaire_flamberge": {
+    "weight": 3.0
+  },
+  "magehunter": {
+    "weight": 2.2
+  },
+  "misery": {
+    "weight": 2.4
+  },
+  "netherite_mage_boots": {
+    "weight": 2.6
+  },
+  "netherite_mage_chestplate": {
+    "weight": 6.6
+  },
+  "netherite_mage_helmet": {
+    "weight": 3.6
+  },
+  "netherite_mage_leggings": {
+    "weight": 5.2
+  },
+  "paladin_chestplate": {
+    "weight": 6.6
+  },
+  "plagued_boots": {
+    "weight": 2.6
+  },
+  "plagued_chestplate": {
+    "weight": 6.6
+  },
+  "plagued_helmet": {
+    "weight": 3.6
+  },
+  "plagued_leggings": {
+    "weight": 5.2
+  },
+  "priest_boots": {
+    "weight": 2.6
+  },
+  "priest_chestplate": {
+    "weight": 6.6
+  },
+  "priest_helmet": {
+    "weight": 3.6
+  },
+  "priest_leggings": {
+    "weight": 5.2
+  },
+  "pumpkin_boots": {
+    "weight": 2.6
+  },
+  "pumpkin_chestplate": {
+    "weight": 6.6
+  },
+  "pumpkin_helmet": {
+    "weight": 3.6
+  },
+  "pumpkin_leggings": {
+    "weight": 5.2
+  },
+  "pyromancer_boots": {
+    "weight": 2.6
+  },
+  "pyromancer_chestplate": {
+    "weight": 6.6
+  },
+  "pyromancer_helmet": {
+    "weight": 3.6
+  },
+  "pyromancer_leggings": {
+    "weight": 5.2
+  },
+  "shadowwalker_boots": {
+    "weight": 2.6
+  },
+  "shadowwalker_chestplate": {
+    "weight": 6.6
+  },
+  "shadowwalker_helmet": {
+    "weight": 3.6
+  },
+  "shadowwalker_leggings": {
+    "weight": 5.2
+  },
+  "speed_boots": {
+    "weight": 2.6
+  },
+  "spellbreaker": {
+    "weight": 2.8000002
+  },
+  "tarnished_helmet": {
+    "weight": 3.0
+  },
+  "wandering_magician_boots": {
+    "weight": 2.4
+  },
+  "wandering_magician_chestplate": {
+    "weight": 6.2
+  },
+  "wandering_magician_helmet": {
+    "weight": 3.4
+  },
+  "wandering_magician_leggings": {
+    "weight": 5.0
+  }
+}

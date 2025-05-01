@@ -1,0 +1,26 @@
+{
+    "version": "2.0.0",
+    "tasks": [
+      {
+        "label": "Gradle runClient",
+        "type": "shell",
+        "command": "./gradlew runClient",
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "Gradle runServer",
+        "type": "shell",
+        "command": "./gradlew runServer",
+        "group": "build",
+        "problemMatcher": []
+      },
+      {
+        "label": "Gradle runData",
+        "type": "shell",
+        "command": "./gradlew runData",
+        "group": "build",
+        "problemMatcher": []
+      }
+    ]
+  }
