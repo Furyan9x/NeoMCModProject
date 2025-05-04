@@ -1,32 +1,33 @@
 # Active Context
 
+**Summary:**
+The weight system for backpacks is now stable and performant, with robust handler registration and JSON-driven configuration. The immediate focus is on performance optimization, UI/UX improvements (encumbrance tracking), and preparing for integration with other major mods. The foundation is solid, enabling confident expansion and new feature development.
+
 ## Current Work Focus
-- Refactoring and optimizing the weight system for inventory management
-- Implementing a centralized approach to backpack integration with Sophisticated Backpacks
-- Enhancing event handling and improving performance
-- Consolidating weight-related code for better maintainability
+- Performance review and optimization of the weight system for backpacks and inventory
+- Planning and design for UI tracking of player encumbrance (icon, color, and stats display)
+- Ensuring compatibility with other major mods (Small Ships, Immersive Aircraft, Create: Steam n Rails, etc.)
+- Exploring custom enchantment or upgrade item for increasing max capacity
 
 ## Recent Changes
-- Completed major weight system refactoring to improve organization and reduce duplication
-- Centralized backpack handling in the BackpackWeightHandlerManager class
-- Removed BackpackPickupHandler class and consolidated its functionality
-- Added proper weight logging to help debugging and testing
-- Implemented WeightSystemManager for coordinated system management
-- Enhanced UUID tracking for backpack movement between slots
+- Major bug with backpack handler registration after slot changes fixed
+- Debounce/cooldown system implemented to prevent weight calculation spam
+- Confirmed that backpack movement between inventory and curio slots maintains functionality
+- Item tooltips for weight and capacity bonus are implemented and working
+- Sophisticated Backpacks integration for capacity bonus via JSON tags is complete
 
 ## Next Steps
-- Thoroughly test the refactored weight system in-game
-- Check for proper backpack handler registration during various operations
-- Verify backpack movement tracking between different inventory/curio slots
-- Ensure weight calculations are correctly handled for backpacks in all locations
-- Test shift-right-click and other special interactions with backpacks
+- Profile and optimize the weight system for both client and server performance
+- Design and implement a UI element for encumbrance tracking (icon, color, and stats)
+- Begin compatibility/integration work with other mods (prioritize Small Ships, Immersive Aircraft, Create: Steam n Rails)
+- Design and implement a custom enchantment or upgrade item for increasing max capacity (ensure it works with JSON-driven system)
+- Continue thorough in-game testing for edge cases and mod interactions
 
 ## Active Decisions and Considerations
-- Balance between detailed logging and performance impact
-- Clear separation of responsibilities between system components
-- Proper resource cleanup on shutdown to prevent memory leaks
-- Efficient cache invalidation to maintain accurate weight calculations
-- Handling of edge cases like player death, dimension travel, and server restarts
+- Performance and optimization are the top priority before adding new features
+- UI/UX for encumbrance must be clear, responsive, and update on all relevant events
+- Compatibility/integration should be modular and not introduce hard dependencies
+- Custom enchantment/upgrade must not break JSON-driven capacity system
 
 ## Important Patterns and Preferences
 - Centralized management of backpack handlers
@@ -34,10 +35,15 @@
 - UUID-based tracking for unique backpack identification
 - Comprehensive logging for testing and debugging
 - Clear separation of responsibilities between event handlers
+- Data-driven configuration for backpack capacity and upgrades
 
 ## Learnings and Project Insights
-- Improved approach to handler registration/unregistration
-- More efficient weight calculation with reduced redundancy
-- Enhanced cache management techniques
-- Better organization of system components and events
-- Proper resource cleanup for improved memory management 
+- Handler registration/unregistration must be robust to all inventory changes
+- Debounce/cooldown logic is essential for performance
+- JSON-driven configuration enables flexible integration with other mods
+- UI/UX is critical for player experience and must be prioritized after optimization
+
+## Integration and Future Planning
+- JSON-driven configuration is enabling flexible integration with other mods and will support future compatibility work
+- No hard dependencies on other mods yet; integration points are being identified for Small Ships, Immersive Aircraft, Create: Steam n Rails, and others
+- Performance profiling tools and strategies (e.g., Java profilers, in-game debug overlays) are being considered to guide optimization efforts 

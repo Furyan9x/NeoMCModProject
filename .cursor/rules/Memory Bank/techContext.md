@@ -37,4 +37,8 @@
 - Client-side GUI development for custom interfaces
 - Server-side command and event handling
 - Network packet system for client-server communication
-- Capability system for extending entity functionality 
+- Capability system for extending entity functionality
+
+---
+
+Performance profiling tools and strategies (e.g., Java profilers, in-game debug overlays) will be used in the next phase. The technical setup is ready for UI/UX and integration work. 

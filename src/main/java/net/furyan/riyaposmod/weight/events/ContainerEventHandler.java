@@ -15,6 +15,7 @@ import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
 import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
 import net.neoforged.neoforge.items.IItemHandler;
+import net.neoforged.neoforge.capabilities.Capabilities;
 import org.slf4j.Logger;
 
 import java.util.HashSet;
@@ -42,63 +43,66 @@ public class ContainerEventHandler {
     private static class WeightContainerListener implements ContainerListener {
         private final Player player;
         private final AbstractContainerMenu menu;
-        private final boolean isBackpackContainer;
 
         public WeightContainerListener(Player player, AbstractContainerMenu menu) {
             this.player = player;
             this.menu = menu;
-            // Check if this is a Sophisticated Backpacks container by checking class name
-            this.isBackpackContainer = menu.getClass().getName().contains("sophisticatedbackpacks") && 
-                                       menu.getClass().getName().contains("BackpackContainer");
         }
 
         @Override
-        public void slotChanged(@Nonnull AbstractContainerMenu container, int slotId, ItemStack stack) {
-            if (container.containerId != menu.containerId) return;
-            
+        public void slotChanged(@Nonnull AbstractContainerMenu container, int slotId, @Nonnull ItemStack stack) {
+            if (player.level().isClientSide() || container.containerId != menu.containerId) return;
+
             Slot slot = container.getSlot(slotId);
+            if (slot == null) {
+                LOGGER.warn("slotChanged event triggered for invalid slotId {} in container {}", slotId, container.containerId);
+                return;
+            }
             ItemStack oldStack = slot.getItem();
-            
-            // Handle backpacks specially
-            if (!oldStack.isEmpty() && BackpackWeightHandlerManager.isSophisticatedBackpack(oldStack)) {
-                LOGGER.debug("Backpack removed from slot {}: {}", slotId, oldStack.getItem());
-                BackpackWeightHandlerManager.unregisterHandler(oldStack);
+
+            boolean changed = !ItemStack.matches(oldStack, stack);
+            if (!changed) return;
+
+            LOGGER.trace("Slot {} changed in container {} for player {}: {} -> {}",
+                slotId, container.containerId, player.getName().getString(), oldStack.getItem(), stack.getItem());
+
+            boolean oldIsBackpack = BackpackWeightHandlerManager.isSophisticatedBackpack(oldStack);
+            boolean newIsBackpack = BackpackWeightHandlerManager.isSophisticatedBackpack(stack);
+            boolean oldIsContainer = WeightCalculator.isContainer(oldStack);
+            boolean newIsContainer = WeightCalculator.isContainer(stack);
+
+            // If a backpack was added or removed
+            if (oldIsBackpack != newIsBackpack) { // More precise check
+                LOGGER.debug("Backpack added/removed in slot change (Slot {}). Scheduling scan.", slotId);
+                // Schedule scan for next tick
+                 player.level().getServer().tell(new net.minecraft.server.TickTask(
+                     player.level().getServer().getTickCount() + 1,
+                     () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
+                 ));
+                 // If a *new* backpack appeared, attempt an immediate scan too
+                 // This might help catch looted/moved backpacks slightly faster
+                 if (!oldIsBackpack && newIsBackpack) {
+                      LOGGER.debug("New backpack detected in slot {}, performing immediate scan attempt.", slotId);
+                      BackpackWeightHandlerManager.scanPlayerForBackpacks(player);
+                 }
             }
-            
-            if (!stack.isEmpty() && BackpackWeightHandlerManager.isSophisticatedBackpack(stack)) {
-                LOGGER.debug("Backpack added to slot {}: {}", slotId, stack.getItem());
-                BackpackWeightHandlerManager.handleBackpackPickup(stack, player);
+
+            if (oldIsContainer) {
+                ContainerWeightHelper.invalidateCache(oldStack, player.level().registryAccess());
             }
-            
-            // For standard containers, handle container items
-            boolean oldIsContainer = !oldStack.isEmpty() && WeightCalculator.isContainer(oldStack);
-            boolean newIsContainer = !stack.isEmpty() && WeightCalculator.isContainer(stack);
-            
-            if (oldIsContainer || newIsContainer) {
-                LOGGER.debug("Container item changed in slot {}: {} -> {}", 
-                    slotId,
-                    oldStack.isEmpty() ? "empty" : oldStack.getItem().toString(), 
-                    stack.isEmpty() ? "empty" : stack.getItem().toString());
-                    
-                // Invalidate caches for both old and new containers if they exist
-                if (oldIsContainer) {
-                    ContainerWeightHelper.invalidateCache(oldStack, player.level().registryAccess());
-                }
-                if (newIsContainer) {
-                    ContainerWeightHelper.invalidateCache(stack, player.level().registryAccess());
-                }
-                
-                // Mark player weight as dirty
-                IPlayerWeight playerWeight = PlayerWeightProvider.getPlayerWeight(player);
-                if (playerWeight != null) {
-                    playerWeight.setDirty(true);
-                }
+            if (newIsContainer) {
+                ContainerWeightHelper.invalidateCache(stack, player.level().registryAccess());
+            }
+
+            IPlayerWeight playerWeight = PlayerWeightProvider.getPlayerWeight(player);
+            if (playerWeight != null) {
+                playerWeight.setDirty(true);
             }
         }
 
         @Override
-        public void dataChanged(@Nonnull AbstractContainerMenu container, int slotId, int value) {
-            // Not needed for weight tracking
+        public void dataChanged(@Nonnull AbstractContainerMenu container, int dataSlot, int value) {
+            // Typically less relevant for weight, but could mark dirty if needed
         }
     }
 
@@ -107,8 +111,8 @@ public class ContainerEventHandler {
         if (event.getEntity().level().isClientSide()) return;
         
         Player player = event.getEntity();
-        int containerId = event.getContainer().containerId;
         AbstractContainerMenu menu = event.getContainer();
+        int containerId = menu.containerId;
         
         LOGGER.info("Container opened: {} (type: {}) for player {}", 
             containerId, 
@@ -116,18 +120,14 @@ public class ContainerEventHandler {
             player.getName().getString());
         
         if (openContainers.add(containerId)) {
-            // Add our container listener to track slot changes
             menu.addSlotListener(new WeightContainerListener(player, menu));
             
-            // Only do a full scan if this is a new container type, not just a vanilla container
-            boolean isSophisticatedContainer = menu.getClass().getName().contains("sophisticatedbackpacks");
+            LOGGER.debug("Container opened. Scheduling scan for player {}.", player.getName().getString());
+            player.level().getServer().tell(new net.minecraft.server.TickTask(
+                 player.level().getServer().getTickCount() + 1,
+                 () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
+             ));
             
-            if (isSophisticatedContainer) {
-                // For sophisticated backpacks containers, we need to ensure backpack handlers are properly registered
-                BackpackWeightHandlerManager.scanPlayerForBackpacks(player);
-            }
-            
-            // Mark player weight as dirty when container is opened
             IPlayerWeight playerWeight = PlayerWeightProvider.getPlayerWeight(player);
             if (playerWeight != null) {
                 playerWeight.setDirty(true);
@@ -140,21 +140,21 @@ public class ContainerEventHandler {
         if (event.getEntity().level().isClientSide()) return;
         
         Player player = event.getEntity();
-        int containerId = event.getContainer().containerId;
+        AbstractContainerMenu menu = event.getContainer();
+        int containerId = menu.containerId;
         
         LOGGER.info("Container closed: {} (type: {}) for player {}", 
             containerId, 
-            event.getContainer().getClass().getName(), 
+            menu.getClass().getName(), 
             player.getName().getString());
         
         if (openContainers.remove(containerId)) {
-            // Invalidate container caches and recalculate weight
-            invalidateContainerCaches(event.getContainer(), player);
+            LOGGER.debug("Container closed. Scheduling scan for player {}.", player.getName().getString());
+            player.level().getServer().tell(new net.minecraft.server.TickTask(
+                 player.level().getServer().getTickCount() + 1,
+                 () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
+             ));
             
-            // Ensure backpack handlers are properly registered
-            BackpackWeightHandlerManager.scanPlayerForBackpacks(player);
-            
-            // Mark player weight as dirty
             IPlayerWeight playerWeight = PlayerWeightProvider.getPlayerWeight(player);
             if (playerWeight != null) {
                 playerWeight.setDirty(true);
@@ -166,14 +166,13 @@ public class ContainerEventHandler {
      * Recursively invalidates caches for all containers in the given container
      */
     private static void invalidateContainerCaches(AbstractContainerMenu container, Player player) {
-        // Process all slots in the container
+        LOGGER.warn("invalidateContainerCaches called on container close - potentially redundant if slotChanged works correctly.");
         for (int i = 0; i < container.slots.size(); i++) {
             ItemStack stack = container.getSlot(i).getItem();
             if (!stack.isEmpty() && WeightCalculator.isContainer(stack)) {
                 ContainerWeightHelper.invalidateCache(stack, player.level().registryAccess());
                 
-                // If this container has an item handler, process its contents recursively
-                IItemHandler handler = stack.getCapability(net.neoforged.neoforge.capabilities.Capabilities.ItemHandler.ITEM);
+                IItemHandler handler = stack.getCapability(Capabilities.ItemHandler.ITEM);
                 if (handler != null) {
                     for (int j = 0; j < handler.getSlots(); j++) {
                         ItemStack nestedStack = handler.getStackInSlot(j);

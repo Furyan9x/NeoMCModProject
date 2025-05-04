@@ -63,9 +63,21 @@ public class WeightEventHandler {
     // Curios slots that are relevant for weight calculation
     public static final Set<String> SLOTS_TO_CHECK = Set.of("back");
     
-    // Cooldown for block break handling
-    private static final Map<UUID, Long> lastBlockBreakTime = new ConcurrentHashMap<>();
-    private static final long BLOCK_BREAK_COOLDOWN_TICKS = 20;
+    // Cooldown for Item Pickup scans to prevent spam
+    private static final long PICKUP_SCAN_COOLDOWN_MS = 100; // 100ms cooldown (2 ticks)
+    private static final Map<UUID, Long> lastPickupScanTime = new ConcurrentHashMap<>();
+    // Track recently scanned item entity IDs to prevent duplicate scans/logs
+    private static final Set<Integer> recentlyScannedItemEntities = ConcurrentHashMap.newKeySet();
+    private static final long ITEM_ENTITY_SCAN_MEMORY_MS = 5000; // 5 seconds memory window
+    private static final Map<Integer, Long> itemEntityScanTimestamps = new ConcurrentHashMap<>();
+
+    // For inventory change polling
+    private static final Map<UUID, Integer> lastBackpackInventoryHash = new ConcurrentHashMap<>();
+    private static final int INVENTORY_POLL_INTERVAL_TICKS = 5; // Check every 5 ticks (0.25s)
+    private static final Map<UUID, Integer> lastInventoryPollTick = new ConcurrentHashMap<>();
+
+    // For pickup event debounce
+    private static final Map<UUID, Integer> lastPickupDirtyTick = new ConcurrentHashMap<>();
 
     /**
      * Main player tick handler - calculates weight and applies effects
@@ -78,6 +90,32 @@ public class WeightEventHandler {
         if (player.level().isClientSide() || !(player instanceof ServerPlayer serverPlayer)) {
             return;
         }
+
+        // --- Periodic inventory poll for backpack changes (outside containers) ---
+        int tickCount = serverPlayer.level().getServer().getTickCount();
+        UUID playerId = serverPlayer.getUUID();
+        int lastPollTick = lastInventoryPollTick.getOrDefault(playerId, -INVENTORY_POLL_INTERVAL_TICKS);
+        if (tickCount - lastPollTick >= INVENTORY_POLL_INTERVAL_TICKS) {
+            // Compute a hash of all backpack UUIDs in inventory
+            int hash = 1;
+            for (int i = 0; i < serverPlayer.getInventory().getContainerSize(); i++) {
+                ItemStack stack = serverPlayer.getInventory().getItem(i);
+                if (BackpackWeightHandlerManager.isSophisticatedBackpack(stack)) {
+                    var uuid = BackpackWeightHandlerManager.getBackpackUUID(stack).orElse(null);
+                    if (uuid != null) {
+                        hash = 31 * hash + uuid.hashCode();
+                    }
+                }
+            }
+            int prevHash = lastBackpackInventoryHash.getOrDefault(playerId, 0);
+            if (hash != prevHash) {
+                LOGGER.debug("Detected backpack inventory change for player {}. Triggering scan.", serverPlayer.getName().getString());
+                BackpackWeightHandlerManager.scanPlayerForBackpacks(serverPlayer);
+                lastBackpackInventoryHash.put(playerId, hash);
+            }
+            lastInventoryPollTick.put(playerId, tickCount);
+        }
+        // --- End inventory poll ---
 
         // Skip dead or spectator players
         if (!player.isAlive() || player.isSpectator()) {
@@ -194,20 +232,44 @@ public class WeightEventHandler {
         IPlayerWeight cap = PlayerWeightProvider.getPlayerWeight(player);
         if (cap == null) return;
 
-        // Get potential weight after pickup
         ItemStack pickupStack = event.getItemEntity().getItem();
+        if (pickupStack.isEmpty()) return; // Nothing to pick up
+
+        boolean isSBBackpack = BackpackWeightHandlerManager.isSophisticatedBackpack(pickupStack);
         float singleWeight = WeightCalculator.getWeight(pickupStack);
-        
+
         // Add container contents weight if applicable
         if (WeightCalculator.isContainer(pickupStack)) {
             singleWeight += ContainerWeightHelper.getContainerWeight(pickupStack, player.level().registryAccess());
-            
-            // If it's a sophisticated backpack, register a handler for it
-            if (BackpackWeightHandlerManager.isSophisticatedBackpack(pickupStack)) {   
-                BackpackWeightHandlerManager.handleBackpackPickup(pickupStack, player);
+
+            // If it's a sophisticated backpack, trigger a scan (with cooldown and entity ID tracking)
+            if (isSBBackpack) {
+                int entityId = event.getItemEntity().getId();
+                long now = System.currentTimeMillis();
+                long lastScan = lastPickupScanTime.getOrDefault(player.getUUID(), 0L);
+                boolean isDuplicateEntity = recentlyScannedItemEntities.contains(entityId);
+                // Clean up old IDs
+                itemEntityScanTimestamps.entrySet().removeIf(e -> now - e.getValue() > ITEM_ENTITY_SCAN_MEMORY_MS);
+                recentlyScannedItemEntities.removeIf(id -> !itemEntityScanTimestamps.containsKey(id));
+
+                if (!isDuplicateEntity && now - lastScan > PICKUP_SCAN_COOLDOWN_MS) {
+                    LOGGER.debug("Sophisticated backpack picked up: {} (entityId {}). Scheduling scan (Cooldown Passed, Not Duplicate).", pickupStack.getItem(), entityId);
+                    lastPickupScanTime.put(player.getUUID(), now);
+                    recentlyScannedItemEntities.add(entityId);
+                    itemEntityScanTimestamps.put(entityId, now);
+                    // Schedule scan for the next tick
+                    player.level().getServer().tell(new net.minecraft.server.TickTask(
+                        player.level().getServer().getTickCount() + 1,
+                        () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
+                    ));
+                    // Invalidate cache immediately for the picked up stack
+                    ContainerWeightHelper.invalidateCache(pickupStack, player.level().registryAccess());
+                } else {
+                    LOGGER.trace("Sophisticated backpack picked up: {} (entityId {}). Scan skipped due to cooldown or duplicate.", pickupStack.getItem(), entityId);
+                }
             }
         }
-        
+
         int count = pickupStack.getCount();
         float prospectiveWeight = cap.getCurrentWeight() + singleWeight * count;
         float maxCap = cap.getMaxCapacity();
@@ -215,23 +277,26 @@ public class WeightEventHandler {
 
         // Check against CRITICAL threshold
         if (prospectivePct >= EncumbranceLevel.CRITICAL.getThreshold()) {
-            long now = System.currentTimeMillis();
+            long nowMsg = System.currentTimeMillis();
             UUID playerId = player.getUUID();
             long lastTime = lastMessageTimestamps.getOrDefault(playerId, 0L);
             long cooldownMillis = COOLDOWN_SECONDS * 1_000L;
 
-            // only send if cooldown has expired
-            if (now - lastTime >= cooldownMillis) {
+            if (nowMsg - lastTime >= cooldownMillis) {
                 player.sendSystemMessage(Component.literal("You are too encumbered to pick that up!"));
-                lastMessageTimestamps.put(playerId, now);
+                lastMessageTimestamps.put(playerId, nowMsg);
             }
-
             event.setCanPickup(TriState.FALSE);
             return;
         }
-        // Allow pickup and mark weight dirty
-        cap.setDirty(true);
+        // Allow pickup and mark weight dirty, but debounce to once per tick
+        int currentTick = player.level().getServer().getTickCount();
+        int lastTick = lastPickupDirtyTick.getOrDefault(player.getUUID(), -1);
+        if (currentTick != lastTick) {
+            cap.setDirty(true);
+            lastPickupDirtyTick.put(player.getUUID(), currentTick);
         }
+    }
     
     /* --- Crafting Events --- */
     @SubscribeEvent
@@ -243,21 +308,22 @@ public class WeightEventHandler {
             return;
         }
         
-        // Check if the crafted item is a container
-        if (WeightCalculator.isContainer(craftedItem)) {
-            // Calculate the weight immediately
-            ContainerWeightHelper.getContainerWeight(craftedItem, player.level().registryAccess());
-            
-            // If it's a sophisticated backpack, register a handler for it
-            if (BackpackWeightHandlerManager.isSophisticatedBackpack(craftedItem)) {
-                BackpackWeightHandlerManager.handleBackpackPickup(craftedItem, player);
-            }
-            
-            // Mark player weight as dirty to force recalculation
-            IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
-            if (weightCap != null) {
-                weightCap.setDirty(true);
-            }
+        // If it's a sophisticated backpack, trigger a scan
+        if (BackpackWeightHandlerManager.isSophisticatedBackpack(craftedItem)) {
+            LOGGER.debug("Sophisticated backpack crafted: {}. Scheduling scan.", craftedItem.getItem());
+            // Schedule scan for the next tick
+            player.level().getServer().tell(new net.minecraft.server.TickTask(
+                 player.level().getServer().getTickCount() + 1,
+                 () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
+             ));
+             // Invalidate cache immediately for the crafted stack
+             ContainerWeightHelper.invalidateCache(craftedItem, player.level().registryAccess());
+        }
+
+        // Always mark player weight as dirty after crafting
+        IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
+        if (weightCap != null) {
+            weightCap.setDirty(true);
         }
     }
     
@@ -265,25 +331,21 @@ public class WeightEventHandler {
     
     @SubscribeEvent
     public static void onBlockBreak(BlockEvent.BreakEvent event) {
-        // Handle backpack blocks being broken
         if (event.getLevel().isClientSide()) return;
-        
+
         Player player = event.getPlayer();
         Block block = event.getState().getBlock();
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
-        
-        // Only process if it's a backpack block
-        if (!blockId.toString().startsWith("sophisticatedbackpacks")) {
-            return;
-        }
-        
-        BlockPos pos = event.getPos();
-        LOGGER.info("Backpack block broken by player: {} at {}", player.getName().getString(), pos);
-        
-        // Mark player weight as dirty to force recalculation
-        IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
-        if (weightCap != null) {
-            weightCap.setDirty(true);
+
+        // If a backpack block is broken, it might drop a backpack item.
+        // Item pickup event will handle the scan if needed.
+        if (blockId.toString().startsWith("sophisticatedbackpacks")) {
+            LOGGER.info("Backpack block broken by player: {} at {}", player.getName().getString(), event.getPos());
+            // Mark player weight as dirty? No, let pickup handle dirtiness if item is acquired.
+            // IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
+            // if (weightCap != null) {
+            //     weightCap.setDirty(true);
+            // }
         }
     }
     
@@ -315,57 +377,58 @@ public class WeightEventHandler {
     
     @SubscribeEvent
     public static void onEquipmentChange(LivingEquipmentChangeEvent event) {
-        if (!(event.getEntity() instanceof Player player)) {
-            return; // Only handle players
+        if (!(event.getEntity() instanceof Player player) || player.level().isClientSide()) {
+            return; // Only handle server-side players
         }
-        
+
         // Prevent backpacks from being equipped in the chest slot
         if (event.getSlot() == EquipmentSlot.CHEST && !event.getTo().isEmpty()) {
-            // Check if the item is in our no_chest_equip tag or is a sophisticated backpack
-            if (event.getTo().is(ModTags.Items.NO_CHEST_EQUIP) || 
+            if (event.getTo().is(ModTags.Items.NO_CHEST_EQUIP) ||
                 BackpackWeightHandlerManager.isSophisticatedBackpack(event.getTo())) {
-                
-                // Cancel equipping by moving it back to inventory
+
+                // Unregister handler for the old ItemStack (chest slot)
+                BackpackWeightHandlerManager.getBackpackUUID(event.getTo()).ifPresent(uuid ->
+                    BackpackWeightHandlerManager.unregisterHandler(uuid)
+                );
+
                 player.getInventory().add(event.getTo().copy());
-                
-                // Clear the slot 
                 player.setItemSlot(EquipmentSlot.CHEST, ItemStack.EMPTY);
-                
-                // Notify the player
                 player.displayClientMessage(
-                    Component.translatable("message.riyaposmod.backpack_chest_slot_restricted"), 
+                    Component.translatable("message.riyaposmod.backpack_chest_slot_restricted"),
                     true);
-                
-                LOGGER.info("Prevented player {} from equipping backpack in chest slot: {}", 
+                LOGGER.info("Prevented player {} from equipping backpack in chest slot: {}",
                     player.getName().getString(), event.getTo().getItem());
-                
+
+                // Invalidate cache for the forcibly moved backpack
+                ContainerWeightHelper.invalidateCache(event.getTo(), player.level().registryAccess());
+                // Mark player weight as dirty
+                IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
+                if (weightCap != null) {
+                    weightCap.setDirty(true);
+                }
+
+                // Schedule scan because item moved back to inventory
+                player.level().getServer().tell(new net.minecraft.server.TickTask(
+                    player.level().getServer().getTickCount() + 1,
+                    () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
+                ));
+                // Immediately scan as well to ensure handler state is correct
+                BackpackWeightHandlerManager.scanPlayerForBackpacks(player);
                 return; // Skip further processing
             }
         }
-        
-        // Ignore mainhand equipment changes to avoid excessive recalculations
-        if (event.getSlot() == EquipmentSlot.MAINHAND) {
-            return;
-        }
-        
+
+        // Determine if the slot is relevant for capacity calculation (not hands)
+        boolean isRelevantSlotForCapacity = event.getSlot() != EquipmentSlot.MAINHAND && event.getSlot() != EquipmentSlot.OFFHAND;
+
         IPlayerWeight weight = PlayerWeightProvider.getPlayerWeight(player);
         if (!(weight instanceof PlayerWeightImpl weightImpl)) return;
-        
-        // Update capacity bonus for this slot
-        weightImpl.updateEquipmentSlotBonus(player, event.getSlot(), event.getFrom(), event.getTo());
-        
-        // Handle backpack in armor slot (like chest)
-        ItemStack oldStack = event.getFrom();
-        ItemStack newStack = event.getTo();
-        
-        if (!oldStack.isEmpty() && BackpackWeightHandlerManager.isSophisticatedBackpack(oldStack)) {
-            BackpackWeightHandlerManager.unregisterHandler(oldStack);
+
+        // Update capacity bonus if the slot is relevant
+        if (isRelevantSlotForCapacity) {
+            weightImpl.updateEquipmentSlotBonus(player, event.getSlot(), event.getFrom(), event.getTo());
         }
-        
-        if (!newStack.isEmpty() && BackpackWeightHandlerManager.isSophisticatedBackpack(newStack)) {
-            BackpackWeightHandlerManager.handleBackpackPickup(newStack, player);
-        }
-        
+        // Always mark the player's weight as dirty after any equipment change
         weightImpl.setDirty(true);
     }
 
@@ -375,35 +438,41 @@ public class WeightEventHandler {
             return; // Only handle server-side players
         }
 
-        // Only process slots we care about
+        // Only process slots we might care about for capacity or backpacks
         if (!SLOTS_TO_CHECK.contains(event.getIdentifier())) {
-            return;
+            // Even if not a backpack slot, other curios might affect capacity
+            // Fall through to update capacity bonus, but skip backpack scan if not relevant stack
+             IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
+             if (weightCap instanceof PlayerWeightImpl weightImpl) {
+                 weightImpl.updateCurioSlotBonus(player, event.getIdentifier(), event.getSlotIndex(), event.getFrom(), event.getTo());
+                 weightImpl.setDirty(true);
+             }
+             return;
         }
 
         IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
-        // Cast to implementation to access slot bonus methods
         if (!(weightCap instanceof PlayerWeightImpl weightImpl)) return;
 
-        ItemStack fromStack = event.getFrom();
-        ItemStack toStack = event.getTo();
+        // Update capacity bonus for this slot
+        weightImpl.updateCurioSlotBonus(player, event.getIdentifier(), event.getSlotIndex(), event.getFrom(), event.getTo());
 
-        // Unregister handler for the item being removed (if it was a backpack)
-        if (!fromStack.isEmpty() && BackpackWeightHandlerManager.isSophisticatedBackpack(fromStack)) {
-            LOGGER.info("Backpack removed from curio slot {}: {}", 
-                event.getIdentifier(), fromStack.getItem());
-            BackpackWeightHandlerManager.unregisterHandler(fromStack);
+        // Check if backpacks were involved
+        boolean oldIsBackpack = BackpackWeightHandlerManager.isSophisticatedBackpack(event.getFrom());
+        boolean newIsBackpack = BackpackWeightHandlerManager.isSophisticatedBackpack(event.getTo());
+
+        // Trigger a scan if a backpack was involved
+        if (oldIsBackpack || newIsBackpack) {
+             // Use getIdentifier() for Curio slot identifier
+             LOGGER.debug("Curio change involved backpack (Slot Identifier: {}). Scheduling scan.", event.getIdentifier());
+             // Schedule scan for the next tick
+             player.level().getServer().tell(new net.minecraft.server.TickTask(
+                  player.level().getServer().getTickCount() + 1,
+                  () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
+              ));
         }
 
-        // Register handler for the item being added (if it's a backpack)
-        if (!toStack.isEmpty() && BackpackWeightHandlerManager.isSophisticatedBackpack(toStack)) {
-            LOGGER.info("Backpack added to curio slot {}: {}", 
-                event.getIdentifier(), toStack.getItem());
-            BackpackWeightHandlerManager.handleBackpackPickup(toStack, player);
-        }
-
-        // Use slot-specific update method for better performance
-        weightImpl.updateCurioSlotBonus(player, event.getIdentifier(), event.getSlotIndex(), fromStack, toStack);
-        weightImpl.setDirty(true); // Ensure weight is recalculated immediately after curio change
+        // Always mark dirty after equipment change
+        weightImpl.setDirty(true);
     }
 
     /* --- Player Lifecycle Events --- */
@@ -445,15 +514,15 @@ public class WeightEventHandler {
         IPlayerWeight weightCap = player.getData(WeightAttachmentRegistry.PLAYER_WEIGHT_ATTACHMENT);
         if (!(weightCap instanceof PlayerWeightImpl weightImpl)) return;
         
-        LOGGER.debug("Player {} logged in. Refreshing weight system.", player.getName().getString());
+        LOGGER.debug("Player {} logged in. Refreshing weight system and scanning for backpacks.", player.getName().getString());
 
         // Refresh equipment bonuses
         weightImpl.refreshEquippedItemBonuses(player);
         
-        // Scan for backpacks and register handlers
+        // Scan for backpacks immediately on login
         BackpackWeightHandlerManager.scanPlayerForBackpacks(player);
         
-        // Mark dirty to force weight calculation on first tick
+        // Mark dirty to force weight calculation and client sync on first tick
         weightImpl.setDirty(true);
     }
     
@@ -462,73 +531,53 @@ public class WeightEventHandler {
         Player player = event.getEntity();
         if (player.level().isClientSide()) return;
         
-        LOGGER.debug("Player {} logged out. Unregistering backpack handlers.", player.getName().getString());
+        LOGGER.debug("Player {} logged out. Cleaning up data.", player.getName().getString());
         
-        // Unregister backpack handlers from player's curios slots
-        if (ModList.get().isLoaded("curios")) {
-            CuriosApi.getCuriosInventory(player).ifPresent(inventory -> {
-                for (String slotType : SLOTS_TO_CHECK) {
-                    ICurioStacksHandler slotHandler = inventory.getCurios().get(slotType);
-                    if (slotHandler != null) {
-                        for (int i = 0; i < slotHandler.getSlots(); i++) {
-                            ItemStack stack = slotHandler.getStacks().getStackInSlot(i);
-                            if (!stack.isEmpty() && BackpackWeightHandlerManager.isSophisticatedBackpack(stack)) {
-                                BackpackWeightHandlerManager.unregisterHandler(stack);
-                            }
-                        }
-                    }
-                }
-            });
-        }
-        
-        // Clean up player-specific data
+        // Option 1: Clear all handlers associated with this player (complex, see manager class)
+        // BackpackWeightHandlerManager.clearPlayerHandlers(player.getUUID());
+
+        // Option 2: Rely on scanPlayerForBackpacks during gameplay and clearAllHandlers on server stop.
+        // This is generally safer.
+
+        // Clean up player-specific tracking data
         lastMessageTimestamps.remove(player.getUUID());
-        lastBlockBreakTime.remove(player.getUUID());
     }
     
     /* --- Interaction Events --- */
 
-    @SubscribeEvent
-    public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
-        if (!(event.getEntity() instanceof Player player) || player.level().isClientSide()) {
-            return;
-        }
-        
-        // Handle right-clicking a backpack item
-        ItemStack stack = event.getItemStack();
-        if (BackpackWeightHandlerManager.isSophisticatedBackpack(stack)) {
-            // Force a scan of player inventory on the next tick
-            player.level().getServer().tell(new net.minecraft.server.TickTask(
-                player.level().getServer().getTickCount() + 1,
-                () -> BackpackWeightHandlerManager.scanPlayerForBackpacks(player)
-            ));
-        }
-    }
+    // @SubscribeEvent // Remove this event handler entirely
+    // public static void onRightClickItem(PlayerInteractEvent.RightClickItem event) {
+    //     // ... removed logic ...
+    // }
     
-    @SubscribeEvent
+    @SubscribeEvent // Keep RightClickBlock for placed backpacks
     public static void onRightClickBlock(PlayerInteractEvent.RightClickBlock event) {
         if (!(event.getEntity() instanceof Player player) || player.level().isClientSide()) {
             return;
         }
         
-        // Check if the player is sneaking (shift-right click)
+        // Handle shift-right clicking a placed backpack block (to pick it up)
         if (!player.isShiftKeyDown()) {
             return;
         }
         
-        // Check if the clicked block is a backpack
         Block block = event.getLevel().getBlockState(event.getPos()).getBlock();
         ResourceLocation blockId = BuiltInRegistries.BLOCK.getKey(block);
         if (!blockId.toString().startsWith("sophisticatedbackpacks")) {
             return;
         }
-        
-        // Schedule a scan for backpacks after a delay
+
+        LOGGER.debug("Player {} shift-right-clicked backpack block: {}. Scheduling scan.",
+             player.getName().getString(), blockId);
+        // Picking up happens over several ticks. Scan after a short delay.
         player.level().getServer().tell(new net.minecraft.server.TickTask(
             player.level().getServer().getTickCount() + 3, // Small delay
             () -> {
-                LOGGER.info("Scanning for backpacks after shift-right click");
                 BackpackWeightHandlerManager.scanPlayerForBackpacks(player);
+                 IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
+                 if (weightCap != null) {
+                     weightCap.setDirty(true);
+                 }
             }
         ));
     }

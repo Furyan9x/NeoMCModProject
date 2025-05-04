@@ -1,9 +1,9 @@
 package net.furyan.riyaposmod.weight.util;
 
 import com.mojang.logging.LogUtils;
-import net.furyan.riyaposmod.registries.WeightAttachmentRegistry;
 import net.furyan.riyaposmod.weight.capability.IPlayerWeight;
-import net.furyan.riyaposmod.weight.events.WeightEventHandler;
+import net.furyan.riyaposmod.weight.capability.PlayerWeightProvider;
+
 import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
@@ -13,30 +13,34 @@ import net.p3pp3rf1y.sophisticatedcore.inventory.InventoryHandler;
 import org.slf4j.Logger;
 
 import java.lang.ref.WeakReference;
-import java.util.HashMap;
-import java.util.Map;
+
 import java.util.Optional;
 import java.util.UUID;
 import java.util.function.IntConsumer;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.Set;
+import java.util.HashSet;
 
-import net.minecraft.nbt.CompoundTag;
+
+import top.theillusivec4.curios.api.CuriosApi;
+import top.theillusivec4.curios.api.type.capability.ICuriosItemHandler;
+import net.neoforged.fml.ModList;
 
 /**
  * Manages weight calculation handlers for Sophisticated Backpacks equipped in Curios slots or inventory.
- * Ensures that weight is recalculated instantly when backpack contents change.
- * <p>
- * This class directly hooks into the Sophisticated Backpacks InventoryHandler's listener system
- * to detect when items are added/removed/modified within backpacks.
- * </p>
+ * Centralizes the registration and unregistration logic via scanPlayerForBackpacks.
  */
 public final class BackpackWeightHandlerManager {
     private static final Logger LOGGER = LogUtils.getLogger();
     private static final String BACKPACK_MOD_ID = "sophisticatedbackpacks";
 
+    // Define relevant Curios slots as a class constant
+    private static final Set<String> RELEVANT_CURIO_SLOTS = Set.of("back");
+
     // Track registered listeners by backpack's UUID to prevent duplicates
-    // and allow proper cleanup when the backpack is unequipped
-    private static final Map<UUID, IntConsumer> registeredListeners = new HashMap<>();
-    private static final Map<UUID, WeakReference<ItemStack>> backpackStacks = new HashMap<>();
+    // Use ConcurrentHashMap for potential thread safety if scans happen concurrently (though unlikely with TickTask)
+    private static final ConcurrentHashMap<UUID, IntConsumer> registeredListeners = new ConcurrentHashMap<>();
+    private static final ConcurrentHashMap<UUID, WeakReference<ItemStack>> backpackStacks = new ConcurrentHashMap<>(); // Track associated stack
 
     private BackpackWeightHandlerManager() {
         // Private constructor to prevent instantiation
@@ -57,321 +61,354 @@ public final class BackpackWeightHandlerManager {
     }
 
     /**
-     * Registers a content change listener for the given backpack ItemStack.
-     * The listener invalidates the container weight cache and marks the player's weight as dirty
-     * whenever items are added/removed from the backpack.
-     *
-     * @param stack  The backpack ItemStack
-     * @param player The player equipping the backpack
+     * Registers a content change listener for a specific backpack ItemStack if needed.
+     * This is now primarily called by scanPlayerForBackpacks.
      */
-    public static void registerHandler(ItemStack stack, Player player) {
-        if (stack.isEmpty() || player == null || player.level().isClientSide()) {
-            return; // Do nothing for empty stacks, null players, or on the client side
+    private static void registerHandler(ItemStack stack, Player player, UUID backpackUuid) {
+        // Basic validation already done by caller (scanPlayerForBackpacks)
+        if (registeredListeners.containsKey(backpackUuid)) {
+            // Attempt to update the weak reference if it's null but listener exists
+            if (backpackStacks.get(backpackUuid) == null || backpackStacks.get(backpackUuid).get() == null) {
+                 backpackStacks.put(backpackUuid, new WeakReference<>(stack));
+                 LOGGER.debug("Updated weak reference for already registered backpack UUID: {}", backpackUuid);
+            }
+            return; // Already registered
         }
 
-        // Skip if not a Sophisticated Backpack
-        if (!isSophisticatedBackpack(stack)) {
-            LOGGER.debug("Item is not a Sophisticated Backpack, skipping handler registration: {}", stack.getItem());
-            return;
-        }
-
-        LOGGER.debug("Attempting to register handler for backpack: {}", stack.getItem());
+        LOGGER.debug("Registering new handler for backpack: {} (UUID: {}) for player: {}",
+            stack.getItem(), backpackUuid, player.getName().getString());
 
         try {
-            // Get the wrapper using the static fromStack method
             IBackpackWrapper wrapper = BackpackWrapper.fromStack(stack);
-            
-            // Get the backpack's UUID, which uniquely identifies this backpack instance
-            Optional<UUID> backpackUuidOpt = wrapper.getContentsUuid();
-            if (backpackUuidOpt.isEmpty()) {
-                LOGGER.debug("Backpack has no UUID yet (new/unused), can't register handler: {}", stack.getItem());
-                return;
-            }
-            
-            UUID backpackUuid = backpackUuidOpt.get();
-            
-            // Skip if a handler is already registered for this backpack UUID
-            if (registeredListeners.containsKey(backpackUuid)) {
-                LOGGER.debug("Handler already registered for backpack UUID: {}", backpackUuid);
-                return;
-            }
-
-            // Store a weak reference to the backpack stack
-            backpackStacks.put(backpackUuid, new WeakReference<>(stack));
-            
-            // Define the slot change listener to be executed when backpack contents change
-            IntConsumer slotChangeListener = (slot) -> {
-                IPlayerWeight weightCap = player.getData(WeightAttachmentRegistry.PLAYER_WEIGHT_ATTACHMENT);
-                if (weightCap != null) {
-                    LOGGER.info("Backpack contents changed in slot {} for player {}: Invalidating cache", 
-                            slot, player.getName().getString());
-                    // Get fresh reference to the backpack stack
-                    final ItemStack[] currentStack = {null};
-                    // Check inventory first
-                    for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
-                        ItemStack invStack = player.getInventory().getItem(i);
-                        if (!invStack.isEmpty() && isSophisticatedBackpack(invStack)) {
-                            Optional<UUID> stackUuid = BackpackWrapper.fromStack(invStack).getContentsUuid();
-                            if (stackUuid.isPresent() && stackUuid.get().equals(backpackUuid)) {
-                                currentStack[0] = invStack;
-                                break;
-                            }
-                        }
-                    }
-                    // If not found in inventory, check curios
-                    if (currentStack[0] == null && net.neoforged.fml.ModList.get().isLoaded("curios")) {
-                        top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(player).ifPresent(handler -> {
-                            for (String slotType : WeightEventHandler.SLOTS_TO_CHECK) {
-                                var slotHandler = handler.getCurios().get(slotType);
-                                if (slotHandler != null) {
-                                    for (int i = 0; i < slotHandler.getSlots(); i++) {
-                                        ItemStack curioStack = slotHandler.getStacks().getStackInSlot(i);
-                                        if (!curioStack.isEmpty() && isSophisticatedBackpack(curioStack)) {
-                                            Optional<UUID> stackUuid = BackpackWrapper.fromStack(curioStack).getContentsUuid();
-                                            if (stackUuid.isPresent() && stackUuid.get().equals(backpackUuid)) {
-                                                currentStack[0] = curioStack;
-                                                break;
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        });
-                    }
-                    
-                    if (currentStack[0] != null) {
-                        ContainerWeightHelper.invalidateCache(currentStack[0], player.level().registryAccess());
-                        // Force immediate weight calculation
-                        ContainerWeightHelper.getContainerWeight(currentStack[0], player.level().registryAccess());
-                    } else {
-                        LOGGER.warn("Could not find backpack with UUID {} in player inventory or curios", backpackUuid);
-                    }
-                    weightCap.setDirty(true);
-                } else {
-                    LOGGER.warn("Could not get IPlayerWeight capability for player {} during backpack change handling", 
-                            player.getName().getString());
-                }
-            };
-
-            // Access the underlying InventoryHandler and register our listener directly
             InventoryHandler inventoryHandler = wrapper.getInventoryHandler();
+
+             // Store a weak reference *before* creating the listener that uses it
+             backpackStacks.put(backpackUuid, new WeakReference<>(stack));
+
+            // Define the slot change listener
+            IntConsumer slotChangeListener = createSlotChangeListener(player, backpackUuid);
+
+            // Add the listener to the backpack's inventory handler
             inventoryHandler.addListener(slotChangeListener);
-            
-            // Log detailed backpack info to help diagnose integration issues
-            LOGGER.info("Backpack details - Type: {}, Slots: {}, UUID: {}", 
-                    stack.getItem().toString(), 
-                    inventoryHandler.getSlots(),
-                    backpackUuid);
 
-            // Track this backpack as having a registered listener
+            // Track the registered listener
             registeredListeners.put(backpackUuid, slotChangeListener);
-            LOGGER.info("Successfully registered inventory change listener for backpack: {} (UUID: {}) for player: {}", 
-                    stack.getItem(), backpackUuid, player.getName().getString());
+            LOGGER.info("Successfully registered listener for backpack: {} (UUID: {})", stack.getItem(), backpackUuid);
+
         } catch (Exception e) {
-            LOGGER.error("Error registering content change listener for backpack: {}", stack.getItem(), e);
+            LOGGER.error("Error registering listener for backpack: {} (UUID: {})", stack.getItem(), backpackUuid, e);
+             // Clean up if registration failed midway
+             registeredListeners.remove(backpackUuid);
+             backpackStacks.remove(backpackUuid);
         }
     }
 
+     /**
+      * Creates the slot change listener lambda. Extracted for clarity.
+      */
+     private static IntConsumer createSlotChangeListener(Player player, UUID backpackUuid) {
+         // Use a weak reference to the player in the listener to potentially help GC
+         WeakReference<Player> playerRef = new WeakReference<>(player);
+
+         return (slot) -> {
+             Player currentPlayer = playerRef.get();
+             if (currentPlayer == null || currentPlayer.level().isClientSide()) {
+                 // Player is gone or we're on the client, listener should be removed soon anyway
+                 return;
+             }
+
+             IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(currentPlayer);
+             if (weightCap != null) {
+                 LOGGER.debug("Backpack content changed: UUID {}, Slot {}. Attempting find & invalidate.", backpackUuid, slot);
+
+                 // Find the current ItemStack instance corresponding to this UUID
+                 LOGGER.trace("Searching for stack with UUID {} for player {}", backpackUuid, currentPlayer.getName().getString());
+                 ItemStack currentBackpackStack = findBackpackStackByUUID(currentPlayer, backpackUuid);
+
+                 if (currentBackpackStack != null && !currentBackpackStack.isEmpty()) {
+                     LOGGER.trace("Found stack {} for UUID {}. Invalidating cache.", currentBackpackStack.getItem(), backpackUuid);
+                     // Invalidate the specific backpack's cache
+                     ContainerWeightHelper.invalidateCache(currentBackpackStack, currentPlayer.level().registryAccess());
+                     // Optional: Force immediate recalculation of the container's weight if needed
+                     // ContainerWeightHelper.getContainerWeight(currentBackpackStack, currentPlayer.level().registryAccess());
+                 } else {
+                     // Critical log: If this happens for Curios, weight won't update
+                     LOGGER.warn("Listener Triggered: Could NOT find ItemStack for backpack UUID {} for player {}. Weight may not update.",
+                         backpackUuid, currentPlayer.getName().getString());
+                 }
+                 // Mark the player's overall weight as dirty
+                 weightCap.setDirty(true);
+             } else {
+                 LOGGER.warn("Listener Triggered: Could not get IPlayerWeight for player {} during backpack change handling.",
+                         currentPlayer.getName().getString());
+             }
+         };
+     }
+
     /**
-     * Unregisters the content change listener for the given backpack ItemStack.
-     * Should be called when the backpack is unequipped or the player logs out.
-     *
-     * @param stack The backpack ItemStack
+     * Unregisters the content change listener for a specific backpack UUID.
+     * This is now primarily called by scanPlayerForBackpacks.
      */
-    public static void unregisterHandler(ItemStack stack) {
-        if (stack.isEmpty() || !isSophisticatedBackpack(stack)) {
-            return;
+    public static void unregisterHandler(UUID backpackUuid) {
+        if (!registeredListeners.containsKey(backpackUuid)) {
+            return; // Not registered
         }
 
-        LOGGER.debug("Attempting to unregister handler for backpack: {}", stack.getItem());
+        LOGGER.debug("Unregistering handler for backpack UUID: {}", backpackUuid);
 
-        try {
-            // Get the wrapper and UUID
-            IBackpackWrapper wrapper = BackpackWrapper.fromStack(stack);
-            Optional<UUID> backpackUuidOpt = wrapper.getContentsUuid();
-            
-            if (backpackUuidOpt.isEmpty()) {
-                LOGGER.debug("Backpack has no UUID, nothing to unregister: {}", stack.getItem());
-                return;
-            }
-            
-            UUID backpackUuid = backpackUuidOpt.get();
+        // We need the ItemStack to get the wrapper to remove the listener.
+        // Try to get it from the weak reference map.
+        WeakReference<ItemStack> stackRef = backpackStacks.get(backpackUuid);
+        ItemStack stack = (stackRef != null) ? stackRef.get() : null;
 
-            // Only proceed if we have a listener registered for this backpack UUID
-            if (registeredListeners.containsKey(backpackUuid)) {
-                // Note: We can't selectively remove our listener, so we need to clear all
-                // The backpack will re-register any internal listeners it needs
-                wrapper.getInventoryHandler().clearListeners();
-                
-                // Remove from our tracking map
-                registeredListeners.remove(backpackUuid);
-                backpackStacks.remove(backpackUuid);
-                LOGGER.info("Unregistered inventory change listener for backpack: {} (UUID: {})", 
-                        stack.getItem(), backpackUuid);
-            } else {
-                LOGGER.debug("No handler was registered for backpack UUID: {}, skipping unregister", backpackUuid);
+        // Only attempt to clear listeners on the SB object if we have a valid stack reference.
+        if (stack != null && !stack.isEmpty() && isSophisticatedBackpack(stack)) {
+            try {
+                IBackpackWrapper wrapper = BackpackWrapper.fromStack(stack);
+                // Check if UUID still matches, though it should if stackRef was valid
+                Optional<UUID> currentUuidOpt = wrapper.getContentsUuid();
+                 if (currentUuidOpt.isPresent() && currentUuidOpt.get().equals(backpackUuid)) {
+                     IntConsumer listener = registeredListeners.get(backpackUuid);
+                     if (listener != null) {
+                         // Attempt to remove the specific listener if SB API supports it, otherwise clear all
+                         // Assuming clearListeners is the only way for now:
+                         wrapper.getInventoryHandler().clearListeners(); // This might remove other listeners too! Be cautious.
+                         // Log as debug, as clearing all listeners has potential side effects
+                         LOGGER.debug("Cleared ALL listeners via SB handler for backpack UUID {} during unregistration. This might affect other mods.", backpackUuid);
+                     }
+                 } else {
+                     // Log as debug, stack might have changed
+                     LOGGER.debug("UUID mismatch or stack changed during unregister for UUID {}", backpackUuid);
+                 }
+            } catch (Exception e) {
+                LOGGER.error("Error accessing backpack wrapper during unregister for UUID: {}", backpackUuid, e);
             }
-        } catch (Exception e) {
-            LOGGER.error("Error unregistering content change listener for backpack: {}", stack.getItem(), e);
+        } else {
+             // Log as debug, this is somewhat expected if the item is gone before the scan runs
+             LOGGER.debug("Could not get valid ItemStack reference to clear SB listeners for backpack UUID: {}. Listener might remain on SB object if not GC'd.", backpackUuid);
         }
+
+        // Always remove from our tracking maps regardless of SB listener removal success
+        registeredListeners.remove(backpackUuid);
+        backpackStacks.remove(backpackUuid);
+        LOGGER.info("Removed listener tracking for backpack UUID: {}", backpackUuid);
     }
-    
+
     /**
-     * Clears all registered handlers.
-     * Should be called on server shutdown or world unload.
+     * Clears all registered handlers. Called on server shutdown or player logout.
      */
     public static void clearAllHandlers() {
         int count = registeredListeners.size();
+        // Create a copy of keys to avoid ConcurrentModificationException while iterating and removing
+         Set<UUID> uuidsToRemove = new HashSet<>(registeredListeners.keySet());
+         uuidsToRemove.forEach(BackpackWeightHandlerManager::unregisterHandler); // Use unregister logic per UUID
+
+        // Ensure maps are cleared even if unregister failed for some
         registeredListeners.clear();
         backpackStacks.clear();
-        LOGGER.info("Cleared all backpack inventory change listeners (count: {})", count);
+        LOGGER.info("Cleared all tracked backpack listeners (attempted count: {})", count);
     }
 
     /**
-     * Checks if the given backpack needs a handler registration.
-     * This avoids registering handlers multiple times for the same backpack.
-     *
-     * @param stack The backpack ItemStack to check
-     * @return true if a handler needs to be registered, false otherwise
-     */
-    public static boolean needsRegistration(ItemStack stack) {
-        if (stack.isEmpty() || !isSophisticatedBackpack(stack)) {
-            return false;
-        }
-        
-        try {
-            // Get the wrapper and UUID
-            IBackpackWrapper wrapper = BackpackWrapper.fromStack(stack);
-            Optional<UUID> backpackUuidOpt = wrapper.getContentsUuid();
-            
-            // New backpacks without UUID will need registration later
-            if (backpackUuidOpt.isEmpty()) {
-                return true;
-            }
-            
-            UUID backpackUuid = backpackUuidOpt.get();
-            
-            // Check if the backpack is registered
-            if (!registeredListeners.containsKey(backpackUuid)) return true;
-            
-            // Check if the stored backpack reference is still valid
-            WeakReference<ItemStack> storedBackpackRef = backpackStacks.get(backpackUuid);
-            if (storedBackpackRef == null || storedBackpackRef.get() == null) {
-                // Clean up invalid reference
-                registeredListeners.remove(backpackUuid);
-                backpackStacks.remove(backpackUuid);
-                return true;
-            }
-            
-            return false;
-        } catch (Exception e) {
-            LOGGER.error("Error checking if backpack needs registration: {}", stack.getItem(), e);
-            return false; // Safer to return false on error
-        }
-    }
-
-    /**
-     * Creates a unique hash for a backpack based on its NBT data
-     * Used for tracking which backpacks have been processed
-     */
-    public static int getBackpackHash(ItemStack stack, Player player) {
-        // Use the stack's NBT hash if available, otherwise fallback to simple hash
-        if (!stack.isEmpty()) {
-            CompoundTag nbt = (CompoundTag) stack.saveOptional(player.level().registryAccess());
-            if (nbt != null) {
-                return nbt.hashCode();
-            }
-        }
-        return stack.getItem().hashCode() + stack.getCount();
-    }
-
-    /**
-     * Handle a backpack being picked up by a player
-     * Centralizes all backpack pickup logic in one place
-     */
-    public static void handleBackpackPickup(ItemStack backpackStack, Player player) {
-        if (player.level().isClientSide() || backpackStack.isEmpty() || !isSophisticatedBackpack(backpackStack)) {
-            return;
-        }
-
-        LOGGER.debug("Handling backpack pickup: {} for player: {}", 
-            backpackStack.getItem(), player.getName().getString());
-        
-        // Invalidate cache and ensure handler is registered
-        ContainerWeightHelper.invalidateCache(backpackStack, player.level().registryAccess());
-        
-        if (needsRegistration(backpackStack)) {
-            registerHandler(backpackStack, player);
-            LOGGER.debug("Registered handler for picked up backpack: {}", backpackStack.getItem());
-        } else {
-            LOGGER.debug("Backpack already has handler, skipping registration: {}", backpackStack.getItem());
-        }
-        
-        // Force immediate weight calculation to ensure accurate values
-        ContainerWeightHelper.getContainerWeight(backpackStack, player.level().registryAccess());
-        
-        // Mark player's weight as dirty
-        IPlayerWeight weightCap = player.getData(WeightAttachmentRegistry.PLAYER_WEIGHT_ATTACHMENT);
-        if (weightCap != null) {
-            weightCap.setDirty(true);
-            LOGGER.debug("Marked player weight dirty after backpack pickup");
-        }
-    }
-    
-    /**
-     * Scan the player's inventory and curios slots for backpacks
-     * and ensure they all have properly registered handlers
+     * Scans the player's inventory and relevant Curios slots for backpacks.
+     * Registers handlers for new backpacks and unregisters handlers for backpacks no longer present.
+     * This is the central function for managing backpack listeners.
      */
     public static void scanPlayerForBackpacks(Player player) {
-        if (player.level().isClientSide()) return;
-        
-        LOGGER.debug("Scanning player inventory for backpacks: {}", player.getName().getString());
-        final boolean[] foundBackpack = {false};
-        
+        if (player == null || player.level().isClientSide()) return;
+
+        LOGGER.debug("Scanning player inventory/curios for backpacks: {}", player.getName().getString());
+        Set<UUID> foundBackpackUuids = new HashSet<>();
+        // Use array to allow modification within lambda
+        final boolean[] potentiallyDirty = {false};
+
+        // 1. Scan Inventory & Curios, collect UUIDs of present backpacks
         // Check main inventory
         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
             ItemStack stack = player.getInventory().getItem(i);
             if (isSophisticatedBackpack(stack)) {
-                foundBackpack[0] = true;
-                
-                if (needsRegistration(stack)) {
-                    registerHandler(stack, player);
-                    LOGGER.debug("Registered handler for backpack in inventory slot {}: {}", i, stack.getItem());
+                Optional<UUID> uuidOpt = getBackpackUUID(stack);
+                if (uuidOpt.isPresent()) {
+                    foundBackpackUuids.add(uuidOpt.get());
+                    // Register if needed
+                    if (!registeredListeners.containsKey(uuidOpt.get())) {
+                         registerHandler(stack, player, uuidOpt.get());
+                         potentiallyDirty[0] = true; // New backpack found
+                         // Invalidate cache for newly registered backpack
+                         ContainerWeightHelper.invalidateCache(stack, player.level().registryAccess());
+                    } else {
+                         // Ensure weak ref is up-to-date
+                         WeakReference<ItemStack> currentRef = backpackStacks.get(uuidOpt.get());
+                         if (currentRef == null || currentRef.get() == null) {
+                             backpackStacks.put(uuidOpt.get(), new WeakReference<>(stack));
+                         }
+                    }
+                } else {
+                    LOGGER.trace("Inventory backpack has no UUID yet: {}", stack.getItem());
                 }
             }
         }
-        
-        // Check Curios slots
+
+        // Check Curios slots (using the class constant now)
+        // TODO: Confirm if SLOTS_TO_CHECK from WeightEventHandler should be used instead?
+        // Using local definition for now as per request.
         if (net.neoforged.fml.ModList.get().isLoaded("curios")) {
             top.theillusivec4.curios.api.CuriosApi.getCuriosInventory(player).ifPresent(handler -> {
-                for (String slotType : net.furyan.riyaposmod.weight.events.WeightEventHandler.SLOTS_TO_CHECK) {
-                    var slotHandler = handler.getCurios().get(slotType);
-                    if (slotHandler != null) {
+                handler.getCurios().forEach((slotIdentifier, slotHandler) -> {
+                     // Use the class constant here
+                     if (RELEVANT_CURIO_SLOTS.contains(slotIdentifier)) {
                         for (int i = 0; i < slotHandler.getSlots(); i++) {
                             ItemStack stack = slotHandler.getStacks().getStackInSlot(i);
                             if (isSophisticatedBackpack(stack)) {
-                                foundBackpack[0] = true;
-                                
-                                if (needsRegistration(stack)) {
-                                    registerHandler(stack, player);
-                                    LOGGER.debug("Registered handler for backpack in curio slot {}: {}", slotType, stack.getItem());
+                                Optional<UUID> uuidOpt = getBackpackUUID(stack);
+                                if (uuidOpt.isPresent()) {
+                                    foundBackpackUuids.add(uuidOpt.get());
+                                    if (!registeredListeners.containsKey(uuidOpt.get())) {
+                                         registerHandler(stack, player, uuidOpt.get());
+                                         potentiallyDirty[0] = true; // New backpack found
+                                         // Invalidate cache for newly registered backpack
+                                         ContainerWeightHelper.invalidateCache(stack, player.level().registryAccess());
+                                    } else {
+                                         // Ensure weak ref is up-to-date
+                                         WeakReference<ItemStack> currentRef = backpackStacks.get(uuidOpt.get());
+                                         if (currentRef == null || currentRef.get() == null) {
+                                             backpackStacks.put(uuidOpt.get(), new WeakReference<>(stack));
+                                         }
+                                    }
+                                } else {
+                                     LOGGER.trace("Curios backpack has no UUID yet: {}", stack.getItem());
                                 }
                             }
                         }
                     }
-                }
+                });
             });
         }
-        
-        // Mark player weight as dirty if we found any backpacks
-        if (foundBackpack[0]) {
-            LOGGER.debug("Found backpacks in player inventory, marking weight dirty");
-            IPlayerWeight weightCap = player.getData(WeightAttachmentRegistry.PLAYER_WEIGHT_ATTACHMENT);
-            if (weightCap != null) {
-                weightCap.setDirty(true);
-            }
+
+        // 2. Unregister handlers for backpacks that are no longer present
+        Set<UUID> uuidsToUnregister = new HashSet<>(registeredListeners.keySet());
+        uuidsToUnregister.removeAll(foundBackpackUuids); // Keep only those not found
+
+        if (!uuidsToUnregister.isEmpty()) {
+             LOGGER.debug("Unregistering handlers for missing backpacks: {}", uuidsToUnregister);
+             uuidsToUnregister.forEach(BackpackWeightHandlerManager::unregisterHandler);
+             potentiallyDirty[0] = true; // Backpack removed
+        }
+
+        // 3. Mark player weight dirty if handlers changed or backpacks were found/removed
+        if (potentiallyDirty[0]) {
+             LOGGER.debug("Backpack scan resulted in changes, marking player weight dirty: {}", player.getName().getString());
+             IPlayerWeight weightCap = PlayerWeightProvider.getPlayerWeight(player);
+             if (weightCap != null) {
+                 weightCap.setDirty(true);
+             }
         } else {
-            LOGGER.debug("No backpacks found in player inventory");
+            LOGGER.trace("Backpack scan completed, no handler changes needed for player {}", player.getName().getString());
         }
     }
+
+    /**
+     * Helper to get the UUID from a backpack stack.
+     */
+    public static Optional<UUID> getBackpackUUID(ItemStack stack) {
+        if (stack.isEmpty() || !isSophisticatedBackpack(stack)) {
+            return Optional.empty();
+        }
+        try {
+            return BackpackWrapper.fromStack(stack).getContentsUuid();
+        } catch (Exception e) {
+            LOGGER.error("Error getting UUID from backpack: {}", stack.getItem(), e);
+            return Optional.empty();
+        }
+    }
+
+     /**
+      * Finds the current ItemStack instance for a given backpack UUID in the player's inventory or curios.
+      */
+     private static ItemStack findBackpackStackByUUID(Player player, UUID backpackUuid) {
+         LOGGER.trace("findBackpackStackByUUID: Searching inventory for {}", backpackUuid);
+         // Check inventory
+         for (int i = 0; i < player.getInventory().getContainerSize(); i++) {
+             ItemStack invStack = player.getInventory().getItem(i);
+             if (isSophisticatedBackpack(invStack)) {
+                 Optional<UUID> stackUuid = getBackpackUUID(invStack);
+                 if (stackUuid.isPresent() && stackUuid.get().equals(backpackUuid)) {
+                     LOGGER.trace("findBackpackStackByUUID: Found in inventory slot {}", i);
+                     return invStack;
+                 }
+             }
+         }
+
+         LOGGER.trace("findBackpackStackByUUID: Searching curios for {}", backpackUuid);
+         // Check curios
+         if (ModList.get().isLoaded("curios")) {
+             final ItemStack[] foundStack = {ItemStack.EMPTY};
+             Optional<ICuriosItemHandler> curiosInvOpt = CuriosApi.getCuriosInventory(player);
+
+             if (curiosInvOpt.isPresent()) {
+                 ICuriosItemHandler curiosInv = curiosInvOpt.get();
+                 // 1. Check the 'back' slot first (preferred)
+                 if (RELEVANT_CURIO_SLOTS != null && !RELEVANT_CURIO_SLOTS.isEmpty()) {
+                     for (String slotIdentifier : RELEVANT_CURIO_SLOTS) {
+                         var slotResult = curiosInv.getCurios().get(slotIdentifier);
+                         if (slotResult != null) {
+                             for (int i = 0; i < slotResult.getStacks().getSlots(); i++) {
+                                 ItemStack curioStack = slotResult.getStacks().getStackInSlot(i);
+                                 if (isSophisticatedBackpack(curioStack)) {
+                                     Optional<UUID> stackUuid = getBackpackUUID(curioStack);
+                                     if (stackUuid.isPresent() && stackUuid.get().equals(backpackUuid)) {
+                                         LOGGER.trace("findBackpackStackByUUID: Found in curio 'back' slot {} index {}", slotIdentifier, i);
+                                         return curioStack;
+                                     }
+                                 }
+                             }
+                         }
+                     }
+                 }
+             } else {
+                 LOGGER.trace("findBackpackStackByUUID: Curios inventory ICuriosItemHandler not present for player {}", player.getName().getString());
+             }
+         } else {
+             LOGGER.trace("findBackpackStackByUUID: Curios mod not loaded");
+         }
+
+         LOGGER.trace("findBackpackStackByUUID: Searching weak reference map for {}", backpackUuid);
+         // Fallback: Check our weak reference map, though it might be stale
+         WeakReference<ItemStack> stackRef = backpackStacks.get(backpackUuid);
+         if (stackRef != null) {
+             ItemStack refStack = stackRef.get();
+             // Basic check if the item type is still a backpack
+             if (refStack != null && !refStack.isEmpty() && isSophisticatedBackpack(refStack)) {
+                 // Verify UUID just in case
+                 Optional<UUID> refUuid = getBackpackUUID(refStack);
+                 if (refUuid.isPresent() && refUuid.get().equals(backpackUuid)) {
+                     LOGGER.trace("findBackpackStackByUUID: Found via weak reference map for UUID {}", backpackUuid);
+                     return refStack;
+                 }
+             }
+         }
+
+         LOGGER.trace("findBackpackStackByUUID: Not found anywhere for UUID {}", backpackUuid);
+         return null; // Not found
+     }
+
+    // --- Removed methods ---
+    // needsRegistration is implicitly handled by scanPlayerForBackpacks checking registeredListeners
+    // getBackpackHash is not currently used in the refactored logic
+    // handleBackpackPickup is removed, its logic integrated into event handlers triggering scans
+
+
+    /**
+     * Utility method to clear handlers associated *only* with a specific player upon logout.
+     * This is tricky because listeners are tied to backpack UUIDs, not directly to players.
+     * A potential approach is to scan the logged-out player one last time and unregister
+     * everything found, but this might affect backpacks shared or dropped.
+     * A safer approach might be relying on server shutdown/world unload via clearAllHandlers.
+     *
+     * For now, this method is a placeholder concept.
+     */
+    // public static void clearPlayerHandlers(UUID loggedOutPlayerId) {
+    //     LOGGER.warn("clearPlayerHandlers functionality is complex and not fully implemented. Relies on scan finding items or clearAllHandlers.");
+    //     // TODO: Implement robust player-specific handler clearing if necessary.
+    // }
 } 

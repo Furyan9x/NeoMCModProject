@@ -218,9 +218,21 @@ public final class ContainerWeightHelper {
             CompoundTag nbt = (CompoundTag) containerStack.saveOptional(provider);
             if (nbt != null) {
                 int cacheKey = nbt.hashCode();
+                // Check if it was already dirty before adding
+                boolean wasAlreadyDirty = dirtyContainers.contains(cacheKey);
                 dirtyContainers.add(cacheKey);
-                LOGGER.debug("Marked container {} as dirty", containerStack.getItem().toString());
+                if (!wasAlreadyDirty) {
+                     LOGGER.debug("Marked container {} (CacheKey: {}) as dirty for cache invalidation.",
+                         containerStack.getItem(), cacheKey);
+                } else {
+                     LOGGER.trace("Container {} (CacheKey: {}) was already marked dirty.",
+                          containerStack.getItem(), cacheKey);
+                }
+            } else {
+                 LOGGER.warn("Attempted to invalidate cache for container {} but could not get NBT.", containerStack.getItem());
             }
+        } else {
+             LOGGER.trace("Attempted to invalidate cache for empty ItemStack.");
         }
     }
     
