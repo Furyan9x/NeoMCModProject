@@ -3,6 +3,7 @@ package net.furyan.riyaposmod.weight.events;
 import com.mojang.logging.LogUtils;
 import net.furyan.riyaposmod.weight.capability.IPlayerWeight;
 import net.furyan.riyaposmod.weight.capability.PlayerWeightProvider;
+import net.furyan.riyaposmod.weight.data.WeightDataManager;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
 import net.neoforged.fml.common.EventBusSubscriber;
@@ -33,6 +34,9 @@ public class WeightTickHandler {
     @SubscribeEvent
     public static void onPlayerTick(PlayerTickEvent.Post event) {
         if (event.getEntity().level().isClientSide() || !(event.getEntity() instanceof ServerPlayer)) return;
+        
+        // --- Optimization: Clear per-tick item weight cache at the start of each tick ---
+        WeightDataManager.clearPerTickWeightCache();
         
         // Process all players marked for update
         if (!playersToUpdate.isEmpty()) {

@@ -17,7 +17,6 @@ import net.neoforged.neoforge.event.entity.player.PlayerContainerEvent;
 import net.neoforged.neoforge.items.IItemHandler;
 import net.neoforged.neoforge.capabilities.Capabilities;
 import org.slf4j.Logger;
-
 import java.util.HashSet;
 import java.util.Set;
 

@@ -1,6 +1,7 @@
 package net.furyan.riyaposmod;
 
 import net.furyan.riyaposmod.client.events.ItemTooltipHandler;
+import net.furyan.riyaposmod.commands.BenchmarkWeightCommand;
 import net.furyan.riyaposmod.commands.DumpItemsCommand;
 import net.furyan.riyaposmod.faction.commands.FactionCommands;
 import net.furyan.riyaposmod.network.ModNetworking;
@@ -9,7 +10,6 @@ import net.furyan.riyaposmod.registries.FactionAttachmentRegistry;
 import net.furyan.riyaposmod.registries.ItemRegistry;
 import net.furyan.riyaposmod.registries.WeightAttachmentRegistry;
 import net.furyan.riyaposmod.faction.FactionRegistry;
-import net.furyan.riyaposmod.weight.events.ContainerEventHandler;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.HolderLookup;
 import net.neoforged.api.distmarker.Dist;
@@ -88,9 +88,9 @@ public class RiyaposMod {
     private void registerCommands(RegisterCommandsEvent evt) {
         // Register faction commands
         FactionCommands.register(evt.getDispatcher());
-        LOGGER.info("Registered faction commands");
         DumpItemsCommand.register(evt.getDispatcher());
-
+        // Register the weight system benchmark command
+        BenchmarkWeightCommand.register(evt.getDispatcher());
         //ClientCommands.register(evt.getDispatcher());
     }
 

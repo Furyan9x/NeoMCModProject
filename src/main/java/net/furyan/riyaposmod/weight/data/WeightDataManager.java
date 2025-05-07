@@ -38,6 +38,12 @@ public class WeightDataManager extends SimpleJsonResourceReloadListener {
     private static final int MIN_SLOTS = 0;
     private static final int MAX_SLOTS = 1000;
     
+    // --- Optimization: Per-tick/per-inventory item weight cache ---
+    // Package-private for WeightTickHandler integration
+    static final ThreadLocal<Map<Item, Float>> perTickWeightCache = ThreadLocal.withInitial(HashMap::new);
+    // --- Optimization: Static cache for per-item capacity bonuses ---
+    private static final Map<Item, Float> staticCapacityBonusCache = new HashMap<>();
+    
     public WeightDataManager() {
         super(GSON, "weight");
     }
@@ -49,6 +55,9 @@ public class WeightDataManager extends SimpleJsonResourceReloadListener {
         perTag.clear();
         containerItems.clear();
         customTags.clear();
+        // --- Optimization: Clear static caches on reload ---
+        perTickWeightCache.remove();
+        staticCapacityBonusCache.clear();
         
         // Load per-namespace item data
         jsons.forEach((location, json) -> {
@@ -229,37 +238,43 @@ public class WeightDataManager extends SimpleJsonResourceReloadListener {
      */
     public static float getWeight(ItemStack stack) {
         if (stack.isEmpty()) return 0.0f;
-        
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        // --- Optimization: Use per-tick/per-inventory cache ---
+        Map<Item, Float> cache = perTickWeightCache.get();
+        Item item = stack.getItem();
+        Float cached = cache.get(item);
+        if (cached != null) return cached;
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
         
         // 1. Check specific item override
         DataEntry itemEntry = perItem.get(id);
-        if (itemEntry != null) return itemEntry.weight();
+        if (itemEntry != null) { cache.put(item, itemEntry.weight()); return itemEntry.weight(); }
         
         // 2. Check container items
         for (Map<ResourceLocation, ContainerItemEntry> category : containerItems.values()) {
             ContainerItemEntry containerEntry = category.get(id);
-            if (containerEntry != null) return containerEntry.weight();
+            if (containerEntry != null) { cache.put(item, containerEntry.weight()); return containerEntry.weight(); }
         }
         
         // 3. Check custom tags
         for (Map<ResourceLocation, CustomTagEntry> category : customTags.values()) {
             CustomTagEntry tagEntry = category.get(id);
-            if (tagEntry != null) return tagEntry.weight();
+            if (tagEntry != null) { cache.put(item, tagEntry.weight()); return tagEntry.weight(); }
         }
         
         // 4. Check normal tags
         for (Map.Entry<TagKey<Item>, DataEntry> entry : perTag.entrySet()) {
             if (stack.is(entry.getKey())) {
+                cache.put(item, entry.getValue().weight());
                 return entry.getValue().weight();
             }
         }
         
         // 5. Check namespace default
         DataEntry nsEntry = perNamespace.get(id.getNamespace());
-        if (nsEntry != null) return nsEntry.weight();
+        if (nsEntry != null) { cache.put(item, nsEntry.weight()); return nsEntry.weight(); }
         
         // 6. Fall back to default
+        cache.put(item, DataEntry.DEFAULT.weight());
         return DataEntry.DEFAULT.weight();
     }
 
@@ -269,12 +284,19 @@ public class WeightDataManager extends SimpleJsonResourceReloadListener {
      */
     public static ContainerItemEntry getContainerEntry(ItemStack stack, String category) {
         if (stack.isEmpty()) return ContainerItemEntry.DEFAULT;
-        
-        ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
+        // --- Optimization: Use static cache for capacity bonus ---
+        Item item = stack.getItem();
+        Float cached = staticCapacityBonusCache.get(item);
+        if (cached != null) {
+            // Return a new ContainerItemEntry with cached bonus if needed
+            return new ContainerItemEntry(0.0f, cached, 0, 0.0f, false);
+        }
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
         Map<ResourceLocation, ContainerItemEntry> categoryMap = containerItems.get(category);
         if (categoryMap == null) return ContainerItemEntry.DEFAULT;
-        
-        return categoryMap.getOrDefault(id, ContainerItemEntry.DEFAULT);
+        ContainerItemEntry entry = categoryMap.getOrDefault(id, ContainerItemEntry.DEFAULT);
+        staticCapacityBonusCache.put(item, entry.getCapacityBonus());
+        return entry;
     }
     
     /**
@@ -286,5 +308,20 @@ public class WeightDataManager extends SimpleJsonResourceReloadListener {
         ResourceLocation id = BuiltInRegistries.ITEM.getKey(stack.getItem());
         return containerItems.values().stream()
             .anyMatch(category -> category.containsKey(id));
+    }
+
+    /**
+     * Clears all static and per-tick caches. Call on data pack reload or in tests.
+     */
+    public static void clearAllCaches() {
+        perTickWeightCache.remove();
+        staticCapacityBonusCache.clear();
+    }
+
+    /**
+     * Clears only the per-tick item weight cache. Call at the start of each tick.
+     */
+    public static void clearPerTickWeightCache() {
+        perTickWeightCache.get().clear();
     }
 } 

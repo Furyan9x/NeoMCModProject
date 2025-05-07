@@ -3,6 +3,13 @@
   "configurations": [
     {
       "type": "java",
+      "name": "BenchmarkingHelper",
+      "request": "launch",
+      "mainClass": "net.furyan.riyaposmod.weight.util.BenchmarkingHelper",
+      "projectName": "ProjectRiyapos-1.21.1 - Cursor"
+    },
+    {
+      "type": "java",
       "request": "launch",
       "name": "Client",
       "presentation": {

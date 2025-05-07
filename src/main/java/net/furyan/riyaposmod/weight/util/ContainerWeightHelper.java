@@ -45,6 +45,23 @@ public final class ContainerWeightHelper {
     }
     
     /**
+     * Computes a stable hash for a container based only on its inventory contents.
+     * This reduces cache misses due to irrelevant NBT changes.
+     */
+    private static int computeInventoryHash(ItemStack containerStack, HolderLookup.Provider provider) {
+        int hash = 1;
+        IItemHandler inventory = containerStack.getCapability(Capabilities.ItemHandler.ITEM);
+        if (inventory != null) {
+            for (int i = 0; i < inventory.getSlots(); i++) {
+                ItemStack stack = inventory.getStackInSlot(i);
+                hash = 31 * hash + (stack.isEmpty() ? 0 : stack.getItem().hashCode());
+                hash = 31 * hash + stack.getCount();
+            }
+        }
+        return hash;
+    }
+    
+    /**
      * Gets the total weight of a container including its contents.
      * Uses caching for performance and prevents infinite recursion.
      *
@@ -64,9 +81,8 @@ public final class ContainerWeightHelper {
                 containerStack.getCount());
         }
         
-        // Use NBT hash as cache key
-        CompoundTag nbt = (CompoundTag) containerStack.saveOptional(provider);
-        int cacheKey = nbt != null ? nbt.hashCode() : 0;
+        // Use stable inventory hash as cache key
+        int cacheKey = computeInventoryHash(containerStack, provider);
         
         // Check if this container or any of its children are dirty
         if (isDirty(cacheKey)) {
@@ -215,21 +231,16 @@ public final class ContainerWeightHelper {
      */
     public static void invalidateCache(ItemStack containerStack, HolderLookup.Provider provider) {
         if (!containerStack.isEmpty()) {
-            CompoundTag nbt = (CompoundTag) containerStack.saveOptional(provider);
-            if (nbt != null) {
-                int cacheKey = nbt.hashCode();
-                // Check if it was already dirty before adding
-                boolean wasAlreadyDirty = dirtyContainers.contains(cacheKey);
-                dirtyContainers.add(cacheKey);
-                if (!wasAlreadyDirty) {
-                     LOGGER.debug("Marked container {} (CacheKey: {}) as dirty for cache invalidation.",
-                         containerStack.getItem(), cacheKey);
-                } else {
-                     LOGGER.trace("Container {} (CacheKey: {}) was already marked dirty.",
-                          containerStack.getItem(), cacheKey);
-                }
+            // Use stable inventory hash as cache key
+            int cacheKey = computeInventoryHash(containerStack, provider);
+            boolean wasAlreadyDirty = dirtyContainers.contains(cacheKey);
+            dirtyContainers.add(cacheKey);
+            if (!wasAlreadyDirty) {
+                 LOGGER.debug("Marked container {} (CacheKey: {}) as dirty for cache invalidation.",
+                     containerStack.getItem(), cacheKey);
             } else {
-                 LOGGER.warn("Attempted to invalidate cache for container {} but could not get NBT.", containerStack.getItem());
+                 LOGGER.trace("Container {} (CacheKey: {}) was already marked dirty.",
+                      containerStack.getItem(), cacheKey);
             }
         } else {
              LOGGER.trace("Attempted to invalidate cache for empty ItemStack.");

@@ -1,0 +1,15 @@
+{
+    "required": true,
+    "minVersion": "0.8",
+    "package": "net.furyan.riyaposmod.mixin",
+    "compatibilityLevel": "JAVA_21",
+    "mixins": [
+      "ContainerShipMixin",
+      "InventoryVehicleEntityMixin",
+      "EngineVehicleMixin"
+    ],
+    "client": [],
+    "injectors": {
+      "defaultRequire": 1
+    }
+  }

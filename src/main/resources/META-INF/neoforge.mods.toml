@@ -9,6 +9,9 @@ displayName="Riyapos Mod"
 authors="Furyan8x"
 description='''My mod to integrate mods in the Riyapos ModPack.'''
 
+[[mixins]]
+  config="riyaposmod.mixins.json"
+
 [[dependencies.riyaposmod]]
 modId="neoforge"
 type="required"
@@ -21,4 +24,6 @@ modId="minecraft"
 type="required"
 versionRange="[1.21.1,1.21.2)"
 ordering="NONE"
-side="BOTH" 
+side="BOTH"
+
+

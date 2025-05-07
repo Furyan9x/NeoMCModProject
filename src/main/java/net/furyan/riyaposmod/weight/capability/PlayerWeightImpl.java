@@ -3,6 +3,7 @@ package net.furyan.riyaposmod.weight.capability;
 import com.mojang.logging.LogUtils;
 import net.furyan.riyaposmod.weight.EncumbranceLevel;
 import net.furyan.riyaposmod.weight.WeightCalculator;
+import net.furyan.riyaposmod.weight.data.WeightDataManager;
 import net.furyan.riyaposmod.weight.events.WeightEventHandler;
 import net.furyan.riyaposmod.weight.util.ContainerWeightHelper;
 import net.minecraft.core.HolderLookup;
@@ -18,7 +19,6 @@ import top.theillusivec4.curios.api.type.inventory.ICurioStacksHandler;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * Implementation of the IPlayerWeight capability.
@@ -106,30 +106,28 @@ public class PlayerWeightImpl implements IPlayerWeight {
         capacityBonuses.entrySet().removeIf(e -> e.getKey().startsWith("equipped_"));
         cachedMaxCapacity = -1; // Invalidate cache
 
-
+        // --- Optimization: Use static capacity bonus cache for equipped items ---
         // Check armor slots
         for (ItemStack stack : player.getArmorSlots()) {
             if (!stack.isEmpty()) {
-                float bonus = WeightCalculator.getCapacityBonus(stack);
+                float bonus = WeightDataManager.getContainerEntry(stack, "containers").getCapacityBonus();
                 if (bonus > 0) {
                     LOGGER.debug("Adding capacity bonus {} from armor item {}", bonus, stack.getItem());
                     addCapacityBonus(bonus, "equipped_armor_" + stack.getItem());
                 }
             }
         }
-
         // Check Curios slots if Curios is loaded
         if (ModList.get().isLoaded("curios")) {
             LOGGER.debug("Checking Curios slots for player {}", player.getName().getString());
             CuriosApi.getCuriosInventory(player).ifPresent(handler -> {
-                // Only check slots we care about (from WeightEventHandler.SLOTS_TO_CHECK)
                 for (String slotType : WeightEventHandler.SLOTS_TO_CHECK) {
                     ICurioStacksHandler slotHandler = handler.getCurios().get(slotType);
                     if (slotHandler != null) {
                         for (int i = 0; i < slotHandler.getSlots(); i++) {
                             ItemStack stack = slotHandler.getStacks().getStackInSlot(i);
                             if (!stack.isEmpty()) {
-                                float bonus = WeightCalculator.getCapacityBonus(stack);
+                                float bonus = WeightDataManager.getContainerEntry(stack, "containers").getCapacityBonus();
                                 if (bonus > 0) {
                                     LOGGER.debug("Adding capacity bonus {} from curio item in {} slot: {}", 
                                         bonus, slotType, stack.getItem());
@@ -141,13 +139,12 @@ public class PlayerWeightImpl implements IPlayerWeight {
                 }
             });
         }
-        
         // Log final capacity after refresh
         LOGGER.debug("Final capacity after refresh for player {}: {} (Base: {}, Bonuses: {})", 
             player.getName().getString(), getMaxCapacity(), baseCapacity, 
             capacityBonuses.entrySet().stream()
                 .map(e -> String.format("%s: %.1f", e.getKey(), e.getValue()))
-                .collect(Collectors.joining(", ")));
+                .collect(java.util.stream.Collectors.joining(", ")));
     }
     
     /**

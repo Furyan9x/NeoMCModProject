@@ -38,6 +38,10 @@ repositories {
             includeGroup("software.bernie.geckolib")
         }
     }
+    maven {
+		name = "TerraformersMC"
+		url = "https://maven.terraformersmc.com/"
+	}
 
 }
 
@@ -135,15 +139,17 @@ configurations {
 }
 
 dependencies {
-    //JEI
-    compileOnly "mezz.jei:jei-${jei_mc_version}-common-api:${jei_version}"
-    compileOnly "mezz.jei:jei-${jei_mc_version}-neoforge-api:${jei_version}"
-    runtimeOnly "mezz.jei:jei-${jei_mc_version}-neoforge:${jei_version}"
+
     //Irons Spells API only
     implementation "io.redspace:irons_spellbooks:${irons_spells_version}"
 
     runtimeOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}"
     compileOnly "top.theillusivec4.curios:curios-neoforge:${curios_version}:api"
+    runtimeOnly "com.illusivesoulworks.caelus:caelus-neoforge:${caelus_version}"
+    compileOnly "com.illusivesoulworks.caelus:caelus-neoforge:${caelus_version}:api"
+    //EMI
+    compileOnly "dev.emi:emi-neoforge:${emi_version}:api"
+	runtimeOnly "dev.emi:emi-neoforge:${emi_version}"
 
     implementation "dev.kosmx.player-anim:player-animation-lib-forge:${player_animator_version}"
 
@@ -151,8 +157,8 @@ dependencies {
 
     implementation "curse.maven:sophisticated-backpacks-422301:6456081"
     implementation "curse.maven:sophisticated-core-618298:6455997"
-
-implementation 'com.google.code.gson:gson:2.10.1'
+    implementation "curse.maven:small-ships-450659:5937999"
+    implementation "curse.maven:immersive-aircraft-666014:6496715"
     //implementation "curse.maven:project-mmo-353935:6383832"
 
 
