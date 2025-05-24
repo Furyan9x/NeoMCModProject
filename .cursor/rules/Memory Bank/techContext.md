@@ -18,7 +18,6 @@
 - Compatibility with Minecraft 1.21.1 and Neoforge API
 - Performance considerations for client and server
 - Compatibility with other mods in the ecosystem:
-  - Project MMO + Classes
   - Create + Addons
   - Iron Spells & Spellbooks
   - Apotheosis
@@ -26,6 +25,9 @@
   - Ars Noveau
   - Better Combat
   - MineColonies
+  - Small Ships
+  - Immersive Aircraft
+  - More as we progress
 
 ## Dependencies
 - Core Minecraft 1.21.1 classes and APIs

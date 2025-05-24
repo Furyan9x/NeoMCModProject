@@ -3,12 +3,17 @@ package net.furyan.riyaposmod;
 import net.furyan.riyaposmod.client.events.ItemTooltipHandler;
 import net.furyan.riyaposmod.commands.BenchmarkWeightCommand;
 import net.furyan.riyaposmod.commands.DumpItemsCommand;
+import net.furyan.riyaposmod.commands.SkillDebugCommand;
+import net.furyan.riyaposmod.commands.SkillInfoCommand;
+import net.furyan.riyaposmod.commands.SkillSetCommand;
 import net.furyan.riyaposmod.faction.commands.FactionCommands;
 import net.furyan.riyaposmod.network.ModNetworking;
 import net.furyan.riyaposmod.registries.CreativeTabRegistry;
 import net.furyan.riyaposmod.registries.FactionAttachmentRegistry;
 import net.furyan.riyaposmod.registries.ItemRegistry;
 import net.furyan.riyaposmod.registries.WeightAttachmentRegistry;
+import net.furyan.riyaposmod.skills.capability.SkillCapabilities;
+import net.furyan.riyaposmod.skills.config.XPConfigLoader;
 import net.furyan.riyaposmod.faction.FactionRegistry;
 import com.mojang.logging.LogUtils;
 import net.minecraft.core.HolderLookup;
@@ -44,7 +49,7 @@ import net.furyan.riyaposmod.weight.data.WeightDataManager;
 @Mod(RiyaposMod.MOD_ID)
 public class RiyaposMod {
     public static final String MOD_ID = "riyaposmod";
-    private static final Logger LOGGER = LogUtils.getLogger();
+    public static final Logger LOGGER = LogUtils.getLogger();
     
     private static final WeightDataManager WEIGHT_DATA = new WeightDataManager();
 
@@ -56,6 +61,7 @@ public class RiyaposMod {
         NeoForge.EVENT_BUS.register(this);
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
         NeoForge.EVENT_BUS.addListener(this::onDataPackReload);
+        // Player login/logout events are now handled in PlayerSkillEvents
 
         // Register the network system
         modEventBus.register(ModNetworking.class);
@@ -66,7 +72,8 @@ public class RiyaposMod {
         FactionRegistry.register(modEventBus);
         FactionAttachmentRegistry.register(modEventBus);
         WeightAttachmentRegistry.register(modEventBus);
-
+        
+        modEventBus.addListener(SkillCapabilities::registerCapabilities);
         // Register the item to a creative tab
         modEventBus.addListener(this::addCreative);
 
@@ -79,6 +86,8 @@ public class RiyaposMod {
 
         // Register to handle server stopping events for cleanup
         NeoForge.EVENT_BUS.addListener(WeightSystemManager::onServerStopping);
+
+        
     }
 
     private void onConfigLoad(ModConfigEvent.Loading event) {
@@ -89,21 +98,25 @@ public class RiyaposMod {
         // Register faction commands
         FactionCommands.register(evt.getDispatcher());
         DumpItemsCommand.register(evt.getDispatcher());
+        SkillInfoCommand.register(evt.getDispatcher());
+        SkillDebugCommand.register(evt.getDispatcher());
+        SkillSetCommand.register(evt.getDispatcher());
+
         // Register the weight system benchmark command
         BenchmarkWeightCommand.register(evt.getDispatcher());
         //ClientCommands.register(evt.getDispatcher());
+        
     }
+    
 
     private void commonSetup(final FMLCommonSetupEvent event) {
-        // Faction data is now handled by the attachment system
         event.enqueueWork(() -> {
+
+            // Faction data is now handled by the attachment system
             LOGGER.info("Faction system initialized via attachment system");
-            // Initialize network event handlers
             ModNetworking.init();
             LOGGER.info("Faction network system initialized");
-
-    });
-        
+        });
     }
 
     // Add the example block item to the building blocks tab
@@ -116,6 +129,7 @@ public class RiyaposMod {
 
     private void onAddReloadListeners(AddReloadListenerEvent event) {
         event.addListener(WEIGHT_DATA);
+        LOGGER.info("Registered XpConfigLoader as a reload listener.");
     }
     
     private void onGatherData(GatherDataEvent event) {
@@ -133,7 +147,8 @@ public class RiyaposMod {
     @SubscribeEvent
     public void onServerStarting(ServerStartingEvent event) {
         // Log that the server is starting
-        LOGGER.info("Server starting, initializing faction system");
+        LOGGER.info("Server starting, initializing faction, weight and skill system");
+        XPConfigLoader.loadAllConfigs();
     }
 
     // You can use EventBusSubscriber to automatically register all static methods in the class annotated with @SubscribeEvent

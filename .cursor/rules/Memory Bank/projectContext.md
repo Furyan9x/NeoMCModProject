@@ -5,13 +5,13 @@ This project aims to transform Minecraft 1.21.1 (using Neoforge) into a RuneScap
 
 ## Problems It Solves
 - Enhances Minecraft's gameplay by adding rich RPG elements and skill-based progression
-- Creates a more immersive economic system with region-locked resources and meaningful transport mechanics
+- Creates a more immersive economic system with region-locked resources and meaningful transport mechanics and management of item weight
 - Implements a more engaging combat system with roles (Tank/Healer/DPS)
 - Provides a cooperative gameplay experience focused on dungeon and group play
 
 ## How It Should Work
 The mod should seamlessly integrate with Minecraft while adding:
-- Multi-skill leveling system (via Project MMO & Project MMO:Classes)
+- Multi-skill leveling system (via custom Skill System similar to Project MMO)
 - Weighted inventory system that makes resource transportation meaningful
 - Varied travel options (ships, aircraft, trains, mounts)
 - Integrated combat mechanics that support different player roles

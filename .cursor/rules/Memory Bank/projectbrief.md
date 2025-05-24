@@ -8,13 +8,13 @@
 
     Skill-Based Progression:
 
-        Leverage Project MMO & Project MMO:Classes for multi-skill leveling.
+        Design a skill system like Project MMO with Runescape/Archeage inspiration for multi-skill leveling.
 
-        Unlock new equipment, training areas, mobs/dungeons as players level.
+        Unlock new equipment, training areas, mobs/dungeons as players level the various skills.
 
     Economic & Transport Systems:
 
-        Inventory Weight: Region-locked resources + large biomes to give merit to hauling.
+        Inventory Weight: Region-locked resources + large biomes to give merit to hauling. Inventory Weight system to introduce logistics and weight management. 
 
         Emergent Economy: Raw resources gain value through transport, crafting, and trading.
 
@@ -22,13 +22,11 @@
 
             Limited “fast travel/teleportation.”
 
-            Small Ships / boat mod; Immersive Aircraft / plane mod; Create-based trains; mounts & breeding.
+            Small Ships / boat mod; Immersive Aircraft / plane mod; Create-based trains(when it is updated to 1.21.1); mounts & breeding.
 
 3. Mod Ecosystem & Integrations
 
     Core Mods:
-
-        Project MMO + Classes
 
         Create + Create Addons
 
@@ -43,6 +41,10 @@
         Better Combat
 
         MineColonies + Addons
+
+        Small Ships
+
+        Immersive Aircraft
 
 
     Integration Tasks:

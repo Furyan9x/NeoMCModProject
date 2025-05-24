@@ -218,7 +218,7 @@ public class PlayerWeightImpl implements IPlayerWeight {
         // Use array to allow modification in lambda
         final float[] weightTotal = {0.0f};
 
-        LOGGER.info("Calculating weight for player: {}", player.getName().getString());
+        //LOGGER.debug("Calculating weight for player: {}", player.getName().getString());
 
         // Calculate weight from main inventory
         Inventory inventory = player.getInventory();
@@ -279,11 +279,11 @@ public class PlayerWeightImpl implements IPlayerWeight {
 
         // Store and log the calculated weight
         this.currentWeight = weightTotal[0];
-        LOGGER.info("Total weight calculated for player {}: {} / {} ({}%)", 
-            player.getName().getString(),
-            String.format("%.2f", this.currentWeight),
-            String.format("%.2f", getMaxCapacity()),
-            String.format("%.1f", (this.currentWeight / getMaxCapacity()) * 100));
+        //LOGGER.info("Total weight calculated for player {}: {} / {} ({}%)", 
+        //    player.getName().getString(),
+        //    String.format("%.2f", this.currentWeight),
+        //    String.format("%.2f", getMaxCapacity()),
+        //    String.format("%.1f", (this.currentWeight / getMaxCapacity()) * 100));
             
         return weightTotal[0];
     }
@@ -398,12 +398,6 @@ public class PlayerWeightImpl implements IPlayerWeight {
     @Override
     public void setDirty(boolean dirty) {
         this.dirty = dirty;
-        if (dirty) {
-            LOGGER.info("Player weight stats - Current: {}, Max: {}, Percentage: {}%",
-                String.format("%.2f", getCurrentWeight()),
-                String.format("%.2f", getMaxCapacity()),
-                String.format("%.1f", (getCurrentWeight() / getMaxCapacity()) * 100));
         }
     }
 
-}

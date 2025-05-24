@@ -7,10 +7,12 @@ import net.furyan.riyaposmod.faction.capability.PlayerFactionProvider;
 import net.furyan.riyaposmod.network.packet.JoinFactionPacket;
 import net.furyan.riyaposmod.network.packet.SyncFactionDataPacket;
 import net.furyan.riyaposmod.network.packet.SyncWeightDataPacket;
+import net.furyan.riyaposmod.network.packet.ClientboundSkillUpdatePacket;
 import net.furyan.riyaposmod.weight.capability.IPlayerWeight;
 import net.furyan.riyaposmod.weight.capability.PlayerWeightProvider;
 import net.minecraft.core.HolderLookup;
 import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
 import net.minecraft.server.MinecraftServer;
 import net.minecraft.server.level.ServerPlayer;
 import net.neoforged.bus.api.SubscribeEvent;
@@ -55,7 +57,7 @@ public class ModNetworking {
     @SubscribeEvent
     public static void registerMessages(final RegisterPayloadHandlersEvent event) {
         LOGGER.info("Registering network packets for {}", RiyaposMod.MOD_ID);
-        final PayloadRegistrar registrar = event.registrar("1");
+        final PayloadRegistrar registrar = event.registrar(RiyaposMod.MOD_ID);
 
         // Register the faction sync packet (server to client only)
         registrar.playToClient(
@@ -70,6 +72,14 @@ public class ModNetworking {
             SyncWeightDataPacket.STREAM_CODEC,
             SyncWeightDataPacket::handle
         );
+
+        // Register the skills update packet (server to client only)
+        registrar.playToClient(
+            ClientboundSkillUpdatePacket.TYPE,
+            ClientboundSkillUpdatePacket.STREAM_CODEC,
+            ClientboundSkillUpdatePacket::handle
+        );
+
         // Register client to server packets
         registrar.playToServer(
                 JoinFactionPacket.TYPE,
@@ -308,5 +318,20 @@ public class ModNetworking {
         } catch (Exception e) {
             LOGGER.error("Error synchronizing weight data for player {}: {}", player.getName().getString(), e.getMessage());
         }
+    }
+
+    /**
+     * Sends a generic packet to a specific player.
+     * @param packet The packet to send.
+     * @param player The player to send the packet to.
+     */
+    public static void sendToPlayer(CustomPacketPayload packet, ServerPlayer player) {
+        if (player == null || packet == null) {
+            LOGGER.warn("Attempted to send packet with null player or packet type");
+            return;
+        }
+        PacketDistributor.sendToPlayer(player, packet);
+        // Use packet.type().id() to get the ResourceLocation for logging
+        LOGGER.debug("Sent packet {} to player {}", packet.type().id(), player.getName().getString());
     }
 }

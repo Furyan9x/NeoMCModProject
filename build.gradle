@@ -97,7 +97,9 @@ neoForge {
             // gameDirectory = project.file('run-data')
 
             // Specify the modid for data generation, where to output the resulting resource, and where to look for existing resources.
-            programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', file('src/main/resources/').getAbsolutePath()
+            programArguments.addAll '--mod', project.mod_id, '--all', '--output', file('src/generated/resources/').getAbsolutePath(), '--existing', 
+            file('src/main/resources/').getAbsolutePath()
+            
         }
 
         // applies to all the run configs above
@@ -124,6 +126,7 @@ neoForge {
         "${mod_id}" {
             sourceSet(sourceSets.main)
         }
+        
     }
 }
 
@@ -157,9 +160,11 @@ dependencies {
 
     implementation "curse.maven:sophisticated-backpacks-422301:6456081"
     implementation "curse.maven:sophisticated-core-618298:6455997"
+
     implementation "curse.maven:small-ships-450659:5937999"
+    
     implementation "curse.maven:immersive-aircraft-666014:6496715"
-    //implementation "curse.maven:project-mmo-353935:6383832"
+
 
 
     // Example optional mod dependency with JEI

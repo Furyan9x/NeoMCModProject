@@ -26,6 +26,7 @@ The RiyaposMod is built on the Neoforge platform for Minecraft 1.21.1, following
 - **Faction System**: Manages player factions with capability, data, and command components
 - **Item System**: Custom items including specialized weapons with their own behaviors
 - **Network System**: Handles packet transmission between client and server
+- **Skill System**: Providers players a Runescape/Archeage like skill/life-skill system to train and unlock gameplay features and mechanics
 
 ## Critical Implementation Paths
 - Registering mod components during game initialization
